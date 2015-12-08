@@ -48,39 +48,37 @@ type regexp =
   (* * *)
   | Repeat of regexp
 
-let automata =
-  [| [| Eps;   Lit "wa"; Delta;    Delta;    Delta;   Delta    |];
-     [| Delta; Eps;      Lit "ka"; Delta;    Delta;   Delta    |];
-     [| Delta; Delta;    Lit "ba"; Lit "ga"; Delta;   Delta    |];
-     [| Delta; Delta;    Delta;    Eps;      Lit "-"; Delta    |];
-     [| Delta; Delta;    Delta;    Delta;    Eps;     Lit "ru" |];
-     [| Delta; Delta;    Delta;    Delta;    Delta;   Eps      |] |];;
-warshall_floyd
-  (fun s1 s2 -> Seq (s1, s2))
-  (fun s1 s2 -> Sum (s1, s2))
-  (fun s -> Repeat s) 6 automata;;
-
 (* 見づらいので簡約する *)
-let rec simpl = function
-  | Sum (s1, s2) ->
-      (match simpl s1, simpl s2 with
-      | Delta, s2' -> s2'
-      | s1', Delta -> s1'
-      | s1', s2' when s1' = s2' -> s1'
-      | s1', s2' -> Sum (s1', s2'))
-  | Seq (s1, s2) -> 
-      (match simpl s1, simpl s2 with
-      | Delta, s2' -> Delta
-      | s1', Delta -> Delta
-      | Eps, s2' -> s2'
-      | s1', Eps -> s1'
-      | s1', s2' -> Seq (s1', s2'))
-  | Repeat s ->
-      (match simpl s with
-      | Eps -> Eps
-      | Delta -> Eps
-      | Repeat s' -> Repeat s'
-      | s' -> Repeat s')
-  | s -> s;;
+let sum s1 s2 =
+  match s1, s2 with
+  | Delta, _ -> s2
+  | _, Delta -> s1
+  | _, _ ->
+      if s1 = s2 then s1
+      else Sum (s1, s2)
+
+let seq s1 s2 =
+  match s1, s2 with
+  | Delta, _ -> Delta
+  | _, Delta -> Delta
+  | Eps, _ -> s2
+  | _, Eps -> s1
+  | _, _ -> Seq (s1, s2)
+
+let repeat = function
+  | Eps -> Eps
+  | Delta -> Eps
+  | (Repeat _) as s -> s
+  | s -> Repeat s
+
+let automata =
+  [| [| Delta; Lit "wa"; Delta;    Delta;    Delta;   Delta    |];
+     [| Delta; Delta;    Lit "ka"; Delta;    Delta;   Delta    |];
+     [| Delta; Delta;    Lit "ba"; Lit "ga"; Delta;   Delta    |];
+     [| Delta; Delta;    Delta;    Delta;    Lit "-"; Delta    |];
+     [| Delta; Delta;    Delta;    Delta;    Delta;   Lit "ru" |];
+     [| Delta; Delta;    Delta;    Delta;    Delta;   Delta    |] |];;
+warshall_floyd seq sum repeat 6 automata;;
+
 (* わかば*ガール *)
-simpl automata.(0).(5);;
+automata.(0).(5);;
