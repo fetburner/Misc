@@ -67,8 +67,6 @@ module BinomialHeap (O : OrderedType) : HEAP with type elt = O.t = struct
     if O.compare e1 e2 < 0 then Node (e1, TCons (t2, ts1))
     else Node (e2, TCons (t1, ts2))
 
-  let delete_min_tree (Node (e, ts)) = (e, ts)
-
   let rec merge_tree_opt_vector : type n. n tree_opt_vector -> n tree_opt_vector -> n tree_opt_vector * n tree option = fun tov1 tov2 ->
     match tov1, tov2 with
     | TONil, TONil -> (TONil, None)
