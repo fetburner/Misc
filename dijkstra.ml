@@ -1,5 +1,5 @@
 (* quite naive implementation *)
-let rec dikjstra ( +. ) min q edge d =
+let rec dikjstra ( +. ) ( < ) q edge d =
   match q with
   | [] -> ()
   | u :: q ->
@@ -8,14 +8,15 @@ let rec dikjstra ( +. ) min q edge d =
           if d.(u) < d.(u') then (u, u' :: q')
           else (u', u :: q')) (u, []) q in
       List.iter (fun (v, c) ->
-        d.(v) <- min d.(v) (c +. d.(u))) (edge u);
-      dikjstra ( +. ) min q edge d
+        if c +. d.(u) < d.(v) then
+          d.(v) <- c +. d.(u)) (edge u);
+      dikjstra ( +. ) ( < ) q edge d
 
 
 (* sample code *)
 let d = Array.make 6 infinity;;
 d.(0) <- 0.;;
-dikjstra ( +. ) min [0; 1; 2; 3; 4; 5] (function
+dikjstra ( +. ) ( < ) [0; 1; 2; 3; 4; 5] (function
   | 0 -> [ (1, 7.); (2, 9.); (5, 14.) ]
   | 1 -> [ (0, 7.); (2, 10.); (3, 15.) ]
   | 2 -> [ (0, 9.); (1, 10.); (3, 11.); (5, 2.) ]
@@ -28,8 +29,7 @@ let d = Array.make 6 (infinity, []);;
 d.(0) <- (0., []);;
 dikjstra
   (fun (c, r) (c', rs) -> (c +. c', r :: rs))
-  (fun ((c, _) as d) ((c', _) as d') ->
-    if c <= c' then d else d')
+  (fun (c, _) (c', _) -> c < c')
   [0; 1; 2; 3; 4; 5]
   (function
     | 0 -> [ (1, (7., "0->1")); (2, (9., "0->2")); (5, (14., "0->5")) ]
