@@ -108,21 +108,7 @@ Inductive evalto : Exp.t -> Exp.t -> Prop :=
       evalto e2 v2 ->
       evalto (Exp.subst 0 [v2] e) v ->
       evalto (Exp.App e1 e2) v.
-
-CoInductive diverge : Exp.t -> Prop :=
-  | D_AppL : forall e1 e2,
-      diverge e1 ->
-      diverge (Exp.App e1 e2)
-  | D_AppR : forall e1 e2 v1,
-      evalto e1 v1 ->
-      diverge e2 ->
-      diverge (Exp.App e1 e2)
-  | D_App : forall e1 e2 e v2 t,
-      evalto e1 (Exp.Abs t e) ->
-      evalto e2 v2 ->
-      diverge (Exp.subst 0 [v2] e) ->
-      diverge (Exp.App e1 e2).
-Hint Constructors evalto diverge.
+Hint Constructors evalto.
 
 Lemma evalto_ident : forall v,
   value v ->
@@ -150,20 +136,6 @@ Proof.
     end); congruence.
 Qed.
 
-Lemma evalto_diverge_disjoint : forall e v,
-  evalto e v -> diverge e -> False.
-Proof.
-  intros e v Hevalto Hdiverge.
-  induction Hevalto; inversion Hdiverge; subst; eauto.
-  repeat (match goal with
-    | H : evalto ?e _, H' : evalto ?e _ |- _ =>
-        generalize (evalto_deterministic _ _ H _ H');
-        intros;
-        clear H
-    | H : Exp.Abs _ _ = Exp.Abs _ _ |- _ => inversion H
-    end; subst); eauto.
-Qed.
-
 Inductive typed : list Types.t -> Exp.t -> Types.t -> Prop :=
   | T_Var : forall env x t,
       nth x (map Some env) None = Some t ->
@@ -185,8 +157,7 @@ Fixpoint V t v : Prop :=
       exists e,
       v = Exp.Abs t1 e /\ (forall v, V t1 v ->
       (* exp t2 (Exp.subst 0 [v] e) *)
-      (exists v', evalto (Exp.subst 0 [v] e) v' /\ V t2 v')
-      \/ diverge (Exp.subst 0 [v] e))
+      exists v', evalto (Exp.subst 0 [v] e) v' /\ V t2 v')
   end.
 
 Lemma V_impl_value : forall t v,
@@ -211,13 +182,11 @@ Lemma fundamental_property : forall env e t,
     nth i (map Some vs) None = Some v ->
     nth i (map Some env) None = Some t ->
     V t v) ->
-  (exists v, evalto (Exp.subst 0 vs e) v /\ V t v)
-  \/ diverge (Exp.subst 0 vs e).
+  exists v, evalto (Exp.subst 0 vs e) v /\ V t v.
 Proof.
   intros ? ? ? Htyped.
   induction Htyped; intros vs Hlength Henv; simpl in *.
-  - left.
-    rewrite Exp.shift_0 in *.
+  - rewrite Exp.shift_0 in *.
     rewrite <- minus_n_O in *.
     destruct (lt_dec x (length vs)).
     + assert (HV : V t (nth x vs (Exp.Var (x - length vs)))).
@@ -229,8 +198,7 @@ Proof.
       * eauto.
     + rewrite nth_overflow in * by (rewrite map_length; omega).
       discriminate.
-  - left.
-    eexists.
+  - eexists.
     split; [ constructor |].
     eexists.
     split; [ reflexivity |].
@@ -241,20 +209,21 @@ Proof.
     destruct i.
     * congruence.
     * eapply Henv; eassumption.
-  - destruct (IHHtyped1 _ Hlength Henv) as [[? [? [? [? Hsubst]]]] | ]; eauto.
+  - destruct (IHHtyped1 _ Hlength Henv) as [? [? [? [? Hsubst]]]].
     subst.
-    destruct (IHHtyped2 _ Hlength Henv) as [[? [? HV]]| ]; eauto.
-    destruct (Hsubst _ HV) as [[? []]|]; eauto.
+    destruct (IHHtyped2 _ Hlength Henv) as [? [? HV]].
+    destruct (Hsubst _ HV) as [? []].
+    eauto.
 Qed.
             
 Lemma type_safety : forall e t,
   typed [] e t ->
-  (exists v, evalto e v) \/ diverge e.
+  exists v, evalto e v.
 Proof.
   intros ? ? Htyped.
   apply fundamental_property with (vs := []) in Htyped; auto.
   - rewrite Exp.subst_nil in *.
-    destruct Htyped as [[? []]|]; eauto.
+    destruct Htyped as [? []]; eauto.
   - intros i ? ? ? ?.
     destruct i; simpl in *; discriminate.
 Qed.
