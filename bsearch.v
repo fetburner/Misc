@@ -44,7 +44,7 @@ Proof.
 Qed.
 
 Definition bsearch' p n :=
-  pred (bsearch (fun x => negb (p x)) (S n)).
+  bsearch (fun x => negb (p (S x))) n.
 
 Lemma bsearch'_correct : forall n p n0,
   (forall n, n <= n0 -> p n = true) ->
@@ -54,16 +54,16 @@ Lemma bsearch'_correct : forall n p n0,
 Proof.
   unfold bsearch'.
   intros ? ? n0 H H' ?.
-  rewrite bsearch_correct with (n0 := S n0); try omega.
+  rewrite bsearch_correct with (n0 := n0); try omega.
   + intros n1 ?.
-    remember (p n1) as b.
+    remember (p (S n1)) as b.
     symmetry in Heqb.
     destruct b; simpl.
     - apply H' in Heqb.
       omega.
     - reflexivity.
   + intros n1 Hp.
-    destruct (le_dec n1 n0) as [ Hle |].
+    destruct (le_dec (S n1) n0) as [ Hle |].
     - apply H in Hle.
       rewrite Hle in Hp.
       simpl in Hp.
@@ -85,5 +85,4 @@ Extract Constant plus => "( + )".
 Extract Constant minus => "( - )".
 Extract Constant div2 => "(fun x -> x / 2)".
 Extract Constant negb => "not".
-Extract Constant pred => "pred".
 Extraction "bsearch.ml" bsearch bsearch'.
