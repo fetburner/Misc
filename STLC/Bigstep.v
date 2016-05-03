@@ -19,7 +19,32 @@ Inductive evalto : Exp.t -> Exp.t -> Prop :=
       evalto e1 (Exp.Bool false) ->
       evalto e3 v3 ->
       evalto (Exp.If e1 e2 e3) v3.
-Hint Constructors evalto.
+
+CoInductive diverge : Exp.t -> Prop :=
+  | D_AppL : forall e1 e2,
+      diverge e1 ->
+      diverge (Exp.App e1 e2)
+  | D_AppR : forall e1 e2 v1,
+      evalto e1 v1 ->
+      diverge e2 ->
+      diverge (Exp.App e1 e2)
+  | D_App : forall e1 e2 e v2 t,
+      evalto e1 (Exp.Abs t e) ->
+      evalto e2 v2 ->
+      diverge (Exp.subst 0 [v2] e) ->
+      diverge (Exp.App e1 e2)
+  | D_If : forall e1 e2 e3,
+      diverge e1 ->
+      diverge (Exp.If e1 e2 e3)
+  | D_IfTrue : forall e1 e2 e3,
+      evalto e1 (Exp.Bool true) ->
+      diverge e2 ->
+      diverge (Exp.If e1 e2 e3)
+  | D_IfFalse : forall e1 e2 e3,
+      evalto e1 (Exp.Bool false) ->
+      diverge e3 ->
+      diverge (Exp.If e1 e2 e3).
+Hint Constructors evalto diverge.
 
 Lemma evalto_ident : forall v,
   Exp.value v ->
@@ -48,10 +73,26 @@ Proof.
   intros e v Hevalto.
   induction Hevalto; intros v' Hevalto'; inversion Hevalto';
   repeat (subst; match goal with
-    | [ Hevalto : evalto ?t ?v, IH : forall v, evalto ?t v -> _ = v |- _ ] =>
+    | Hevalto : evalto ?e ?v, IH : forall v, evalto ?e v -> _ = v |- _ =>
         let H := fresh in
         generalize (IH _ Hevalto); intros H;
         inversion H;
         clear Hevalto
     end); congruence.
+Qed.
+
+Lemma evalto_diverge_disjoint : forall e v,
+  evalto e v ->
+  diverge v ->
+  False.
+Proof.
+  intros ? ? Hevalto Hdiverge.
+  induction Hevalto; inversion Hdiverge;
+  repeat (subst; match goal with
+    | H : evalto ?e _, H' : evalto ?e _ |- _ =>
+        generalize (evalto_deterministic _ _ H _ H');
+        intros;
+        clear H
+    | H : Exp.Abs _ _ = Exp.Abs _ _ |- _ => inversion H
+    end); eauto.
 Qed.
