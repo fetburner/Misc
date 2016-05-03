@@ -75,7 +75,7 @@ Proof.
     + destruct (IHHtyped3 _ Hlength Henv) as [? []]; eauto.
 Qed.
 
-Lemma normalize : forall e t,
+Theorem normalize : forall e t,
   typed [] e t ->
   exists v, evalto e v.
 Proof.

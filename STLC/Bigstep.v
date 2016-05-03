@@ -30,6 +30,15 @@ Proof.
 Qed.
 Hint Resolve evalto_ident.
 
+Lemma evalto_value : forall e v,
+  evalto e v ->
+  Exp.value v.
+Proof.
+  intros ? ? Hevalto.
+  induction Hevalto; eauto.
+Qed.
+Hint Resolve evalto_value.
+
 Lemma evalto_deterministic : forall e v,
   evalto e v ->
   forall v',
