@@ -1,5 +1,5 @@
 Require Import Arith List Program.
-Require Import Syntax.
+Require Import Exp.
 
 Inductive typed : list Types.t -> Exp.t -> Types.t -> Prop :=
   | T_Var : forall env x t,
@@ -11,7 +11,14 @@ Inductive typed : list Types.t -> Exp.t -> Types.t -> Prop :=
   | T_App : forall env e1 e2 t1 t2,
       typed env e1 (Types.Fun t1 t2) ->
       typed env e2 t1 ->
-      typed env (Exp.App e1 e2) t2.
+      typed env (Exp.App e1 e2) t2
+  | T_Bool : forall env b,
+      typed env (Exp.Bool b) Types.Bool
+  | T_If : forall env e1 e2 e3 t,
+      typed env e1 Types.Bool ->
+      typed env e2 t ->
+      typed env e3 t ->
+      typed env (Exp.If e1 e2 e3) t.
 Hint Constructors typed.
 
 Lemma typed_shift : forall env e t,
@@ -61,4 +68,20 @@ Proof.
     eapply (IHHtyped (t1 :: env')); simpl; eauto.
 Qed.
 
+Lemma canonical_form_fun : forall v t1 t2,
+  Exp.value v ->
+  typed [] v (Types.Fun t1 t2) ->
+  exists e, v = Exp.Abs t1 e.
+Proof.
+  intros ? ? ? Hv Htyped.
+  inversion Hv; subst; inversion Htyped; eauto.
+Qed.
 
+Lemma canonical_form_bool : forall v,
+  Exp.value v ->
+  typed [] v Types.Bool ->
+  exists b, v = Exp.Bool b.
+Proof.
+  intros ? Hv Htyped.
+  inversion Hv; subst; inversion Htyped; eauto.
+Qed.

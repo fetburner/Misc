@@ -1,9 +1,5 @@
 Require Import Program.
-Require Import Syntax.
-
-Inductive value : Exp.t -> Prop :=
-  | V_Abs : forall e t, value (Exp.Abs t e).
-Hint Constructors value.
+Require Import Types Exp.
 
 Inductive evalto : Exp.t -> Exp.t -> Prop :=
   | E_Abs : forall e t,
@@ -12,11 +8,21 @@ Inductive evalto : Exp.t -> Exp.t -> Prop :=
       evalto e1 (Exp.Abs t e) ->
       evalto e2 v2 ->
       evalto (Exp.subst 0 [v2] e) v ->
-      evalto (Exp.App e1 e2) v.
+      evalto (Exp.App e1 e2) v
+  | E_Bool : forall b,
+      evalto (Exp.Bool b) (Exp.Bool b)
+  | E_IfTrue : forall e1 e2 e3 v2,
+      evalto e1 (Exp.Bool true) ->
+      evalto e2 v2 ->
+      evalto (Exp.If e1 e2 e3) v2
+  | E_IfFalse : forall e1 e2 e3 v3,
+      evalto e1 (Exp.Bool false) ->
+      evalto e3 v3 ->
+      evalto (Exp.If e1 e2 e3) v3.
 Hint Constructors evalto.
 
 Lemma evalto_ident : forall v,
-  value v ->
+  Exp.value v ->
   evalto v v.
 Proof.
   intros ? Hv.

@@ -1,14 +1,5 @@
 Require Import List Relations Program.
-Require Import Syntax Smallstep Typing.
-
-Lemma canonical_form_fun : forall v t1 t2,
-  value v ->
-  typed [] v (Types.Fun t1 t2) ->
-  exists e, v = Exp.Abs t1 e.
-Proof.
-  intros ? ? ? Hv Htyped.
-  inversion Hv; subst; inversion Htyped; eauto.
-Qed.
+Require Import Types Exp Smallstep Typing.
 
 Lemma preservation : forall e e',
   simplto e e' ->
@@ -32,10 +23,11 @@ Proof.
   remember [] as env.
   induction Htyped; subst; simpl in *; eauto.
   - destruct x; congruence.
-  - destruct (IHHtyped1 eq_refl) as [| []]; [| eauto ].
-    destruct (canonical_form_fun _ _ _ H Htyped1).
-    subst.
+  - destruct (IHHtyped1 eq_refl) as [ H | []]; [| eauto ].
+    destruct (canonical_form_fun _ _ _ H Htyped1); subst.
     destruct (IHHtyped2 eq_refl) as [| []]; eauto.
+  - destruct (IHHtyped1 eq_refl) as [ H | []]; eauto.
+    destruct (canonical_form_bool _ H Htyped1) as [[]]; subst; eauto.
 Qed.
 
 Theorem type_safety : forall e e',
