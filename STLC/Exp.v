@@ -1,5 +1,5 @@
 Require Import Arith List Omega Program.
-Require Types.
+Require Id Types.
 
 Inductive t :=
   | Var : nat -> t

@@ -1,5 +1,5 @@
 Require Import List Relations Program.
-Require Import Types Exp Smallstep Typing.
+Require Import Id Types Exp Smallstep Typing.
 
 Lemma preservation : forall e e',
   simplto e e' ->

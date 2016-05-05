@@ -1,5 +1,5 @@
 Require Import Arith List Program.
-Require Import Exp.
+Require Import Id Types Exp.
 
 Inductive typed : list Types.t -> Exp.t -> Types.t -> Prop :=
   | T_Var : forall env x t,

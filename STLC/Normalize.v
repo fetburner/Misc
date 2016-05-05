@@ -1,9 +1,10 @@
 Require Import Arith List Program.
-Require Import Types Exp Bigstep Typing.
+Require Import Id Types Exp Bigstep Typing.
 
 (* ugly definition... *)
 Fixpoint V t v : Prop :=
   match t with
+  | Types.Var _ => False
   | Types.Bool =>
       exists b, v = Exp.Bool b
   | Types.Fun t1 t2 =>
@@ -25,6 +26,7 @@ Proof.
     repeat match goal with
     | H : exists _, _ |- _ => destruct H
     | H : _ /\ _ |- _ => destruct H
+    | H : False |- _ => destruct H
     end; solve [ congruence | auto ].
 Qed.
 Hint Resolve V_impl_value.

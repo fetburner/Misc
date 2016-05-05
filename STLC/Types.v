@@ -1,3 +1,6 @@
+Require Id.
+
 Inductive t :=
   | Bool
-  | Fun : t -> t -> t.
+  | Fun : t -> t -> t
+  | Var : Id.t -> t.

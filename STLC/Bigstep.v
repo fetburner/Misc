@@ -1,5 +1,5 @@
 Require Import Program.
-Require Import Types Exp.
+Require Import Id Types Exp.
 
 Inductive evalto : Exp.t -> Exp.t -> Prop :=
   | E_Abs : forall e t,

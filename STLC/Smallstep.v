@@ -1,5 +1,5 @@
 Require Import Relations Program.
-Require Types Exp.
+Require Id Types Exp.
 
 Inductive simplto : Exp.t -> Exp.t -> Prop :=
   | S_AppL : forall e1 e1' e2,
