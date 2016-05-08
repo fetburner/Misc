@@ -8,6 +8,24 @@ Inductive t :=
   | Bool : bool -> t
   | If : t -> t -> t -> t.
 
+Fixpoint FTV e :=
+  match e with
+  | Var _ => Id.FSet.empty
+  | Abs t e => Id.FSet.union (Types.FV t) (FTV e)
+  | App e1 e2 => Id.FSet.union (FTV e1) (FTV e2)
+  | Bool _ => Id.FSet.empty
+  | If e1 e2 e3 => Id.FSet.union (FTV e1) (Id.FSet.union (FTV e2) (FTV e3))
+  end.
+
+Fixpoint subst_type s e :=
+  match e with
+  | Var x => Var x
+  | Abs t e => Abs (Types.subst_list s t) (subst_type s e)
+  | App e1 e2 => App (subst_type s e1) (subst_type s e2)
+  | Bool b => Bool b
+  | If e1 e2 e3 => If (subst_type s e1) (subst_type s e2) (subst_type s e3)
+  end.
+
 Fixpoint shift c d e :=
   match e with
   | Var x => Var (if le_dec (S x) c then x else d + x)

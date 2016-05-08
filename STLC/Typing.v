@@ -1,5 +1,16 @@
 Require Import Arith List Program.
-Require Import Id Types Exp.
+Require Import Id Types Exp Constraint.
+
+Lemma Forall_app : forall X (P : X -> Prop) l l',
+  Forall P (l ++ l') -> Forall P l /\ Forall P l'.
+Proof.
+  intros ? ? l ? H.
+  induction l; simpl in *.
+  + eauto.
+  + inversion H; subst.
+    destruct (IHl H3).
+    eauto.
+Qed.
 
 Inductive typed : list Types.t -> Exp.t -> Types.t -> Prop :=
   | T_Var : forall env x t,
@@ -84,4 +95,134 @@ Lemma canonical_form_bool : forall v,
 Proof.
   intros ? Hv Htyped.
   inversion Hv; subst; inversion Htyped; eauto.
+Qed.
+
+Fixpoint extract env xs e :=
+  match e with
+  | Exp.Var x =>
+      option_map (fun t => (t, [], xs)) (nth x (map Some env) None)
+  | Exp.Abs t1 e =>
+      match extract (t1 :: env) xs e with
+      | None => None
+      | Some (t2, c, xs') => Some (Types.Fun t1 t2, c, xs')
+      end
+  | Exp.App e1 e2 =>
+      match extract env xs e1 with
+      | None => None
+      | Some (t1, c1, xs') =>
+          match extract env xs' e2 with
+          | None => None
+          | Some (t2, c2, xs'') =>
+              let x := Id.FSet.fresh xs'' in
+              Some (Types.Var x, (t1, Types.Fun t2 (Types.Var x)) :: c1 ++ c2, Id.FSet.add x xs'')
+          end
+      end
+  | Exp.Bool _ => Some (Types.Bool, [], xs)
+  | Exp.If e1 e2 e3 =>
+      match extract env xs e1 with
+      | None => None
+      | Some (t1, c1, xs') =>
+          match extract env xs' e2 with
+          | None => None
+          | Some (t2, c2, xs'') =>
+              match extract env xs'' e3 with
+              | None => None
+              | Some (t3, c3, xs''') =>
+                  Some (t2, (t1, Types.Bool) :: (t2, t3) :: c1 ++ c2 ++ c3, xs''')
+              end
+          end
+      end
+  end.
+
+Lemma extract_variables : forall e env xs t c xs',
+  extract env xs e = Some (t, c, xs') ->
+  Id.FSet.Subset xs xs'.
+Proof.
+  fix 1.
+  intros e ? ? ? ? ? Hextract.
+  Hint Resolve
+    FSetProperties.subset_trans
+    FSetProperties.subset_add_2
+    FSetProperties.subset_refl.
+  destruct e; simpl in *;
+    repeat match goal with
+    | H : context [extract ?env ?xs ?e] |- _ =>
+        let o := fresh in
+        let IHo := fresh in
+        remember (extract env xs e) as o eqn:IHo;
+        symmetry in IHo;
+        destruct o as [[[] ?]|]; simpl in H;
+        [ apply extract_variables in IHo | congruence ]
+    | H : Some _ = Some _ |- _ => inversion H; subst; clear H
+    | H : (_, _) = (_, _) |- _ => inversion H; subst; clear H
+    end; eauto.
+  - destruct (nth n (map Some env) None); simpl in *;
+    inversion Hextract; subst.
+    apply FSetProperties.subset_refl.
+Qed.
+
+Lemma extract_sound : forall e env xs t c xs' s,
+  extract env xs e = Some (t, c, xs') ->
+  Forall (fun t => Id.FSet.Subset (Types.FV t) xs) env ->
+  Id.FSet.Subset (Exp.FTV e) xs ->
+  unifies s c ->
+  typed (map (Types.subst_list s) env) (Exp.subst_type s e) (Types.subst_list s t).
+Proof.
+  fix 1.
+  intros e ? ? ? ? ? s Hextract Henv He Hunifies.
+  Hint Resolve FSetProperties.subset_trans.
+  destruct e; simpl in *;
+    repeat match goal with
+    | H : context [extract ?env ?xs ?e] |- _ =>
+        let o := fresh in
+        let IHo := fresh in
+        remember (extract env xs e) as o eqn:IHo;
+        symmetry in IHo;
+        destruct o as [[[] ?]|]; simpl in H;
+        [ generalize (extract_sound _ _ _ _ _ _ s IHo); intros;
+          generalize (extract_variables _ _ _ _ _ _ IHo); intros;
+          clear IHo
+        | congruence ]
+    | H : Some _ = Some _ |- _ => inversion H; subst; clear H
+    | H : (_, _) = (_, _) |- _ => inversion H; subst; clear H
+    end;
+    repeat (match goal with
+    | _ => rewrite Types.subst_list_Fun in *
+    | _ => rewrite Types.subst_list_Bool in *
+    | H : Id.FSet.Subset (Id.FSet.union ?s1 ?s2) ?s3 |- _ =>
+        assert (Id.FSet.Subset s1 s3) by (intros ? ?; apply H; eauto);
+        assert (Id.FSet.Subset s2 s3) by (intros ? ?; apply H; eauto);
+        clear H
+    | H : Forall _ (_ :: _) |- _ => inversion H; subst; clear H
+    | H : Forall _ (_ ++ _) |- _ => apply Forall_app in H; destruct H
+    end; simpl in *); eauto.
+  - remember (nth n (map Some env) None) as o.
+    destruct o; simpl in *; inversion Hextract; subst.
+    destruct (lt_dec n (length env)).
+    + constructor.
+      rewrite nth_indep with (d' := Some (Types.subst_list s Types.Bool)) by (repeat rewrite map_length; omega).
+      rewrite nth_indep with (d' := Some Types.Bool) in Heqo by (rewrite map_length; omega).
+      repeat rewrite map_nth in *.
+      congruence.
+    + rewrite nth_overflow  in Heqo by (rewrite map_length; omega).
+      congruence.
+  - econstructor.
+    + rewrite H7 in *.
+      apply H; eauto.
+    + apply H0; eauto.
+      eapply Forall_impl; [| apply Henv ].
+      simpl.
+      eauto.
+  - econstructor.
+    + rewrite H10 in *.
+      eapply H; eauto.
+    + apply H0; eauto.
+      eapply Forall_impl; [| apply Henv ].
+      simpl.
+      eauto.
+    + rewrite H12.
+      apply H2; eauto.
+      eapply Forall_impl; [| apply Henv ].
+      simpl.
+      eauto.
 Qed.
