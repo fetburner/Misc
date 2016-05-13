@@ -47,3 +47,33 @@ Proof.
   intros ? ? ? ? H.
   induction H; eauto.
 Qed.
+
+Lemma value_cannot_simpl : forall v,
+  Exp.value v -> forall e, ~simplto v e.
+Proof.
+  intros ? Hvalue ? Hcontra.
+  induction Hvalue; inversion Hcontra.
+Qed.
+
+Lemma simplto_deterministic : forall e e',
+  simplto e e' ->
+  forall e'',
+  simplto e e'' ->
+  e' = e''.
+Proof.
+  intros ? ? Hsimplto.
+  induction Hsimplto; intros ? Hsimplto';
+    inversion Hsimplto'; subst; clear Hsimplto';
+    repeat match goal with
+    | H : simplto ?e _ |- _ =>
+        match goal with
+        | _ =>
+            let H' := fresh in
+            assert (H' : Exp.value e) by eauto;
+            destruct (value_cannot_simpl _ H' _ H)
+        | IH : forall _, simplto ?e _ -> _ |- _ =>
+            apply IH in H; subst
+        end
+    end;
+    congruence.
+Qed.

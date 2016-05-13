@@ -62,3 +62,31 @@ Proof.
   Hint Constructors clos_refl_trans_1n.
   induction Hsimplto; eauto.
 Qed.
+
+Lemma diverge_impl_simpl : forall e,
+  diverge e ->
+  exists e', simplto e e' /\ diverge e'.
+Proof.
+  Ltac extract_evalto H :=
+    (let H' := fresh in
+    generalize (evalto_value _ _ H); intros H';
+    apply evalto_impl_simplto_multi in H;
+    apply clos_rt_rt1n in H;
+    inversion H; subst; clear H;
+      [| match goal with
+         | H : clos_refl_trans_1n _ simplto _ ?v, H' : Exp.value ?v |- _ =>
+             apply clos_rt1n_rt in H;
+             generalize (simplto_multi_impl_evalto _ _ H H'); intros ?
+         end ]).
+  intros e Hdiverge.
+  induction e; inversion Hdiverge; subst.
+  - destruct (IHe1 H0) as [? []].
+    eauto.
+  - extract_evalto H1; eauto.
+    destruct (IHe2 H2) as [? []]; eauto 7.
+  - extract_evalto H1; eauto.
+    extract_evalto H2; eauto.
+  - destruct (IHe1 H0) as [? []]; eauto.
+  - extract_evalto H1; eauto.
+  - extract_evalto H1; eauto.
+Qed.
