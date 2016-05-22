@@ -1,5 +1,5 @@
 Require Import Arith List Program.
-Require Import Id Types Exp Bigstep Typing.
+Require Import Id Types Exp BigstepSubst Typing.
 
 (* ugly definition... *)
 Fixpoint V t v : Prop :=

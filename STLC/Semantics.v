@@ -1,6 +1,6 @@
 Require Import Relations.
 Require Id Types Exp.
-Require Import Bigstep Smallstep.
+Require Import BigstepSubst SmallstepCbv.
 
 Theorem evalto_impl_simplto_multi : forall e v,
   evalto e v ->
