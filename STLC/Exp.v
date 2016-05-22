@@ -52,6 +52,18 @@ Proof.
 Qed.
 Hint Rewrite shift_0.
 
+Lemma shift_meld : forall e c c' d d',
+  c <= c' <= c + d ->
+  shift c' d' (shift c d e) = shift c (d + d') e.
+Proof.
+  fix 1.
+  intros e ? ? ? ? ?.
+  destruct e; simpl;
+    repeat rewrite shift_meld by omega;
+    eauto.
+  elim_shift_subst_var; f_equal; omega.
+Qed.
+
 Fixpoint subst x es e :=
   match e with
   | Var y =>
@@ -98,6 +110,70 @@ Proof.
     f_equal.
     apply nth_indep.
     omega.
+Qed.
+
+Lemma shift_subst_distr : forall e c d x es,
+  c <= x ->
+  shift c d (subst x es e) = subst (d + x) es (shift c d e).
+Proof.
+  fix 1.
+  intros e ? ? ? ? ?.
+  destruct e; simpl;
+    repeat rewrite shift_subst_distr by omega;
+    repeat (f_equal; try omega).
+  elim_shift_subst_var;
+    try rewrite shift_meld by omega;
+    repeat (f_equal; try omega).
+Qed.
+Hint Rewrite shift_subst_distr using omega.
+
+Lemma subst_subst_distr : forall e x x' es es',
+  x' <= x ->
+  subst x es (subst x' es' e)
+  = subst x' (map (subst (x - x') es) es') (subst (length es' + x) es e).
+Proof.
+  fix 1.
+  intros e ? ? ? ? ?.
+  destruct e; simpl;
+    try solve
+      [ eauto
+      | f_equal;
+        rewrite subst_subst_distr by omega;
+        repeat (f_equal; try omega) ].
+  elim_shift_subst_var; eauto; try omega.
+  - rewrite nth_overflow by (repeat rewrite map_length; omega).
+    simpl.
+    rewrite subst_ignore by (try rewrite map_length; omega).
+    rewrite map_length.
+    elim_shift_subst_var; try omega.
+    clear l1.
+    (* repeat (f_equal; try omega) *)
+    f_equal.
+    + omega.
+    + f_equal.
+      * omega.
+      * do 2 f_equal.
+        omega.
+  - clear l0.
+    rewrite map_length.
+    repeat rewrite <- map_nth with (f := shift 0 x').
+    rewrite <- map_nth with (f := subst x es).
+    replace (map (subst x es) (map (shift 0 x') es'))
+      with (map (shift 0 x') (map (subst (x - x') es) es'));
+    repeat rewrite map_map.
+    + destruct (eq_nat_dec x x').
+      * subst.
+        apply nth_indep.
+        rewrite map_length.
+        omega.
+      * f_equal.
+        simpl.
+        elim_shift_subst_var; eauto; omega.
+    + apply map_ext.
+      intros ?.
+      rewrite shift_subst_distr by omega.
+      f_equal.
+      omega.
 Qed.
 
 Lemma subst_nil : forall x e,
