@@ -15,14 +15,6 @@ Proof.
     + eapply rt_trans.
       * eapply S_AppR_multi; eauto.
       * eauto.
-  - eapply rt_trans.
-    + eapply S_If_multi.
-      eauto.
-    + eauto.
-  - eapply rt_trans.
-    + eapply S_If_multi.
-      eauto.
-    + eauto.
 Qed.
 
 Lemma simplto_preserves_evalto : forall e e',
@@ -86,7 +78,4 @@ Proof.
     destruct (IHe2 H2) as [? []]; eauto 7.
   - extract_evalto H1; eauto.
     extract_evalto H2; eauto.
-  - destruct (IHe1 H0) as [? []]; eauto.
-  - extract_evalto H1; eauto.
-  - extract_evalto H1; eauto.
 Qed.

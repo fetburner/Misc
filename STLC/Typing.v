@@ -24,12 +24,7 @@ Inductive typed : list Types.t -> Exp.t -> Types.t -> Prop :=
       typed env e2 t1 ->
       typed env (Exp.App e1 e2) t2
   | T_Bool : forall env b,
-      typed env (Exp.Bool b) Types.Bool
-  | T_If : forall env e1 e2 e3 t,
-      typed env e1 Types.Bool ->
-      typed env e2 t ->
-      typed env e3 t ->
-      typed env (Exp.If e1 e2 e3) t.
+      typed env (Exp.Bool b) Types.Bool.
 Hint Constructors typed.
 
 Lemma typed_shift : forall env e t,
@@ -118,20 +113,6 @@ Fixpoint extract env xs e :=
           end
       end
   | Exp.Bool _ => Some (Types.Bool, [], xs)
-  | Exp.If e1 e2 e3 =>
-      match extract env xs e1 with
-      | None => None
-      | Some (t1, c1, xs') =>
-          match extract env xs' e2 with
-          | None => None
-          | Some (t2, c2, xs'') =>
-              match extract env xs'' e3 with
-              | None => None
-              | Some (t3, c3, xs''') =>
-                  Some (t2, (t1, Types.Bool) :: (t2, t3) :: c1 ++ c2 ++ c3, xs''')
-              end
-          end
-      end
   end.
 
 Lemma extract_variables : forall e env xs t c xs',
@@ -210,18 +191,6 @@ Proof.
     + rewrite H7 in *.
       apply H; eauto.
     + apply H0; eauto.
-      eapply Forall_impl; [| apply Henv ].
-      simpl.
-      eauto.
-  - econstructor.
-    + rewrite H10 in *.
-      eapply H; eauto.
-    + apply H0; eauto.
-      eapply Forall_impl; [| apply Henv ].
-      simpl.
-      eauto.
-    + rewrite H12.
-      apply H2; eauto.
       eapply Forall_impl; [| apply Henv ].
       simpl.
       eauto.

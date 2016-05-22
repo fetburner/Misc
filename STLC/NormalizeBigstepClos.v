@@ -55,9 +55,6 @@ Proof.
     subst.
     destruct (Hsubst _ HSN) as [? []].
     eauto.
-  - destruct (IHHtyped1 _ Hlength Henv) as [? [? [[]]]]; subst.
-    + destruct (IHHtyped2 _ Hlength Henv) as [? []]; eauto.
-    + destruct (IHHtyped3 _ Hlength Henv) as [? []]; eauto.
 Qed.
 
 Theorem normalize : forall e t,

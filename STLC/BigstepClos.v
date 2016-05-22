@@ -19,13 +19,5 @@ Inductive evalto : list Value.t -> Exp.t -> Value.t -> Prop :=
       evalto (v2 :: env0) e v ->
       evalto env (Exp.App e1 e2) v
   | E_Bool : forall env b,
-      evalto env (Exp.Bool b) (Value.Bool b)
-  | E_IfTrue : forall env e1 e2 e3 v2,
-      evalto env e1 (Value.Bool true) ->
-      evalto env e2 v2 ->
-      evalto env (Exp.If e1 e2 e3) v2
-  | E_IfFalse : forall env e1 e2 e3 v3,
-      evalto env e1 (Value.Bool false) ->
-      evalto env e3 v3 ->
-      evalto env (Exp.If e1 e2 e3) v3.
+      evalto env (Exp.Bool b) (Value.Bool b).
 Hint Constructors evalto.

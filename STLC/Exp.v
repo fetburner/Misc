@@ -5,8 +5,7 @@ Inductive t :=
   | Var : nat -> t
   | Abs : Types.t -> t -> t
   | App : t -> t -> t
-  | Bool : bool -> t
-  | If : t -> t -> t -> t.
+  | Bool : bool -> t.
 
 Fixpoint FTV e :=
   match e with
@@ -14,7 +13,6 @@ Fixpoint FTV e :=
   | Abs t e => Id.FSet.union (Types.FV t) (FTV e)
   | App e1 e2 => Id.FSet.union (FTV e1) (FTV e2)
   | Bool _ => Id.FSet.empty
-  | If e1 e2 e3 => Id.FSet.union (FTV e1) (Id.FSet.union (FTV e2) (FTV e3))
   end.
 
 Fixpoint subst_type s e :=
@@ -23,7 +21,6 @@ Fixpoint subst_type s e :=
   | Abs t e => Abs (Types.subst_list s t) (subst_type s e)
   | App e1 e2 => App (subst_type s e1) (subst_type s e2)
   | Bool b => Bool b
-  | If e1 e2 e3 => If (subst_type s e1) (subst_type s e2) (subst_type s e3)
   end.
 
 Fixpoint shift c d e :=
@@ -32,7 +29,6 @@ Fixpoint shift c d e :=
   | Abs t e => Abs t (shift (S c) d e)
   | App e1 e2 => App (shift c d e1) (shift c d e2)
   | Bool b => Bool b
-  | If e1 e2 e3 => If (shift c d e1) (shift c d e2) (shift c d e3)
   end.
 
 Ltac elim_shift_subst_var :=
@@ -72,7 +68,6 @@ Fixpoint subst x es e :=
   | Abs t e => Abs t (subst (S x) es e)
   | App e1 e2 => App (subst x es e1) (subst x es e2)
   | Bool b => Bool b
-  | If e1 e2 e3 => If (subst x es e1) (subst x es e2) (subst x es e3)
   end.
 
 Lemma subst_ignore : forall e c d x es,

@@ -72,9 +72,6 @@ Proof.
     destruct (IHHtyped2 _ Hlength Henv) as [? [? HV]].
     destruct (Hsubst _ HV) as [? []].
     eauto.
-  - destruct (IHHtyped1 _ Hlength Henv) as [? [? [[]]]]; subst.
-    + destruct (IHHtyped2 _ Hlength Henv) as [? []]; eauto.
-    + destruct (IHHtyped3 _ Hlength Henv) as [? []]; eauto.
 Qed.
 
 Theorem normalize : forall e t,

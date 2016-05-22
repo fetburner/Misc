@@ -26,8 +26,6 @@ Proof.
   - destruct (IHHtyped1 eq_refl) as [ H | []]; [| eauto ].
     destruct (canonical_form_fun _ _ _ H Htyped1); subst.
     destruct (IHHtyped2 eq_refl) as [| []]; eauto.
-  - destruct (IHHtyped1 eq_refl) as [ H | []]; eauto.
-    destruct (canonical_form_bool _ H Htyped1) as [[]]; subst; eauto.
 Qed.
 
 Theorem type_safety : forall e e',

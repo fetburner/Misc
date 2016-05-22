@@ -18,9 +18,7 @@ Inductive neutral : Exp.t -> Prop :=
   | N_App : forall e1 e2,
       neutral (Exp.App e1 e2)
   | N_Bool : forall b,
-      neutral (Exp.Bool b)
-  | N_If : forall e1 e2 e3,
-      neutral (Exp.If e1 e2 e3).
+      neutral (Exp.Bool b).
 Hint Constructors neutral.
 
 Lemma CR2 : forall t e e',
@@ -125,9 +123,6 @@ Proof.
   - constructor.
     intros ? Hcontra.
     inversion Hcontra.
-  - apply CR3; eauto.
-    intros ? Hred.
-    inversion Hred.
 Qed.
 
 Theorem strong_normalize : forall e t,

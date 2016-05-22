@@ -10,15 +10,7 @@ Inductive evalto : Exp.t -> Exp.t -> Prop :=
       evalto (Exp.subst 0 [v2] e) v ->
       evalto (Exp.App e1 e2) v
   | E_Bool : forall b,
-      evalto (Exp.Bool b) (Exp.Bool b)
-  | E_IfTrue : forall e1 e2 e3 v2,
-      evalto e1 (Exp.Bool true) ->
-      evalto e2 v2 ->
-      evalto (Exp.If e1 e2 e3) v2
-  | E_IfFalse : forall e1 e2 e3 v3,
-      evalto e1 (Exp.Bool false) ->
-      evalto e3 v3 ->
-      evalto (Exp.If e1 e2 e3) v3.
+      evalto (Exp.Bool b) (Exp.Bool b).
 
 CoInductive diverge : Exp.t -> Prop :=
   | D_AppL : forall e1 e2,
@@ -32,18 +24,7 @@ CoInductive diverge : Exp.t -> Prop :=
       evalto e1 (Exp.Abs t e) ->
       evalto e2 v2 ->
       diverge (Exp.subst 0 [v2] e) ->
-      diverge (Exp.App e1 e2)
-  | D_If : forall e1 e2 e3,
-      diverge e1 ->
-      diverge (Exp.If e1 e2 e3)
-  | D_IfTrue : forall e1 e2 e3,
-      evalto e1 (Exp.Bool true) ->
-      diverge e2 ->
-      diverge (Exp.If e1 e2 e3)
-  | D_IfFalse : forall e1 e2 e3,
-      evalto e1 (Exp.Bool false) ->
-      diverge e3 ->
-      diverge (Exp.If e1 e2 e3).
+      diverge (Exp.App e1 e2).
 Hint Constructors evalto diverge.
 
 Lemma evalto_ident : forall v,
