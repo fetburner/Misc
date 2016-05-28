@@ -133,7 +133,8 @@ Proof.
         remember (extract env xs e) as o eqn:IHo;
         symmetry in IHo;
         destruct o as [[[] ?]|]; simpl in H;
-        [ apply extract_variables in IHo | congruence ]
+        [ apply extract_variables in IHo
+        | congruence ]
     | H : Some _ = Some _ |- _ => inversion H; subst; clear H
     | H : (_, _) = (_, _) |- _ => inversion H; subst; clear H
     end; eauto.
@@ -147,10 +148,10 @@ Lemma extract_sound : forall e env xs t c xs' s,
   Forall (fun t => Id.FSet.Subset (Types.FV t) xs) env ->
   Id.FSet.Subset (Exp.FTV e) xs ->
   unifies s c ->
-  typed (map (Types.subst_list s) env) (Exp.subst_type s e) (Types.subst_list s t).
+  typed (map (Types.subst s) env) (Exp.subst_type s e) (Types.subst s t).
 Proof.
   fix 1.
-  intros e ? ? ? ? ? s Hextract Henv He Hunifies.
+  intros e ? ? ? ? ? s Hextract Henv ? ?.
   Hint Resolve FSetProperties.subset_trans.
   destruct e; simpl in *;
     repeat match goal with
@@ -168,8 +169,6 @@ Proof.
     | H : (_, _) = (_, _) |- _ => inversion H; subst; clear H
     end;
     repeat (match goal with
-    | _ => rewrite Types.subst_list_Fun in *
-    | _ => rewrite Types.subst_list_Bool in *
     | H : Id.FSet.Subset (Id.FSet.union ?s1 ?s2) ?s3 |- _ =>
         assert (Id.FSet.Subset s1 s3) by (intros ? ?; apply H; eauto);
         assert (Id.FSet.Subset s2 s3) by (intros ? ?; apply H; eauto);
@@ -181,16 +180,16 @@ Proof.
     destruct o; simpl in *; inversion Hextract; subst.
     destruct (lt_dec n (length env)).
     + constructor.
-      rewrite nth_indep with (d' := Some (Types.subst_list s Types.Bool)) by (repeat rewrite map_length; omega).
+      rewrite nth_indep with (d' := Some (Types.subst s Types.Bool)) by (repeat rewrite map_length; omega).
       rewrite nth_indep with (d' := Some Types.Bool) in Heqo by (rewrite map_length; omega).
       repeat rewrite map_nth in *.
       congruence.
-    + rewrite nth_overflow  in Heqo by (rewrite map_length; omega).
+    + rewrite nth_overflow in Heqo by (rewrite map_length; omega).
       congruence.
   - econstructor.
-    + rewrite H7 in *.
-      apply H; eauto.
-    + apply H0; eauto.
+    + rewrite H8 in *.
+      apply H1; eauto.
+    + apply H2; eauto.
       eapply Forall_impl; [| apply Henv ].
       simpl.
       eauto.

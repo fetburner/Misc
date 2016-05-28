@@ -18,7 +18,7 @@ Fixpoint FTV e :=
 Fixpoint subst_type s e :=
   match e with
   | Var x => Var x
-  | Abs t e => Abs (Types.subst_list s t) (subst_type s e)
+  | Abs t e => Abs (Types.subst s t) (subst_type s e)
   | App e1 e2 => App (subst_type s e1) (subst_type s e2)
   | Bool b => Bool b
   end.

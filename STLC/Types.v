@@ -20,13 +20,11 @@ Fixpoint size t :=
   | Var _ => 1
   end.
 
-Fixpoint subst x t0 t :=
+Fixpoint subst s t :=
   match t with
   | Bool => Bool
-  | Fun t1 t2 => Fun (subst x t0 t1) (subst x t0 t2)
-  | Var y =>
-      if Id.eq_dec x y then t0
-      else Var y
+  | Fun t1 t2 => Fun (subst s t1) (subst s t2)
+  | Var x => s x
   end.
 
 Definition eq_dec : forall t1 t2 : t, { t1 = t2 } + { t1 <> t2 }.
@@ -64,93 +62,67 @@ Proof.
   destruct t; simpl in *; omega.
 Qed.
 
-Lemma subst_occur : forall x t1 t2,
-  Id.FSet.In x (FV (subst x t1 t2)) ->
-  Id.FSet.In x (FV t1).
+Lemma subst_FV : forall x s t,
+  Id.FSet.In x (FV (subst s t)) ->
+  exists y, Id.FSet.In x (FV (s y)) /\ Id.FSet.In y (FV t).
 Proof.
-  intros x t1 t2 ?.
-  induction t2; simpl in *; eauto.
+  intros x s t H.
+  induction t; simpl in *; eauto.
   - destruct (Id.FSet.empty_spec H).
   - apply Id.FSet.union_spec in H.
-    destruct H; eauto.
-  - destruct (Id.eq_dec x t0); simpl in *.
-    + eauto.
-    + eapply Id.FSet.singleton_spec in H.
-      congruence.
+    destruct H as [H | H];
+    [ destruct (IHt1 H) as [? []]
+    | destruct (IHt2 H) as [? []]];
+    eauto.
 Qed.
 
-Lemma subst_fv : forall x y t1 t2,
-  Id.FSet.In x (FV (subst y t1 t2)) ->
-  Id.FSet.In x (FV t1) \/ Id.FSet.In x (FV t2).
+Lemma subst_id : forall t, subst Var t = t.
 Proof.
-  intros ? ? ? t2 ?.
-  induction t2; simpl in *; eauto.
-  - apply Id.FSet.union_spec in H.
-    destruct H as [ H | H ];
-    [ destruct (IHt2_1 H)
-    | destruct (IHt2_2 H) ]; eauto 9.
-  - destruct (Id.eq_dec y t0); eauto.
+  intros t.
+  induction t; simpl in *; congruence.
 Qed.
 
-Lemma subst_notin_fv : forall x t1 t2,
-  ~Id.FSet.In x (FV t2) -> subst x t1 t2 = t2.
+Lemma subst_ext : forall s s' t,
+  (forall x, Id.FSet.In x (FV t) -> s x = s' x) ->
+  subst s t = subst s' t.
 Proof.
-  intros ? ? t2 ?.
-  induction t2; simpl in *; f_equal; eauto 6.
-  - destruct (Id.eq_dec x t0).
-    + exfalso.
-      apply H.
-      apply Id.FSet.singleton_spec.
-      eauto.
-    + eauto.
+  intros ? ? t ?.
+  induction t; simpl in *; f_equal; eauto.
 Qed.
 
-Definition subst_list s t :=
-  (fold_left (fun t s =>
-    subst (fst s) (snd s) t) s t).
-
-Lemma subst_list_Bool : forall s,
-  subst_list s Bool = Bool.
+Lemma subst_subst : forall s s' t,
+  subst s (subst s' t) = subst (fun x => subst s (s' x)) t.
 Proof.
-  intros s.
-  induction s; simpl; eauto.
-Qed.
-
-Lemma subst_list_Fun : forall s t1 t2,
-  subst_list s (Fun t1 t2) = Fun (subst_list s t1) (subst_list s t2).
-Proof.
-  intros s.
-  induction s; intros ? ?; simpl; eauto.
-Qed.
-
-Notation unifies s t1 t2 :=
-  (subst_list s t1 = subst_list s t2).
-
-Lemma subst_preserves_unifies : forall x t0 s t,
-  unifies s (Var x) t0 ->
-  unifies s t (subst x t0 t).
-Proof.
-  intros ? ? ? t ?.
-  induction t; simpl in *; eauto.
-  - repeat rewrite subst_list_Fun.
-    f_equal; eauto.
-  - destruct (Id.eq_dec x t1); subst; eauto.
+  intros ? ? t.
+  induction t; simpl in *; f_equal; eauto.
 Qed.
 
 Lemma unifies_occur : forall x t,
-  Var x <> t -> Id.FSet.In x (FV t) -> forall s, ~unifies s (Var x) t.
+  Var x <> t -> Id.FSet.In x (FV t) -> forall s, s x <> subst s t.
 Proof.
   intros x t ? ? s Hunifies.
-  assert (Hsize : size (subst_list s t) <= size (subst_list s (Var x))) by (rewrite Hunifies; omega).
+  assert (Hsize : size (subst s t) <= size (s x)) by (rewrite Hunifies; omega).
   clear Hunifies.
   induction t; simpl in *.
   - destruct (Id.FSet.empty_spec H0).
   - apply Id.FSet.union_spec in H0.
-    rewrite subst_list_Fun in *.
-    simpl in *.
-    destruct H0; [ apply IHt1 | apply IHt2 ]; eauto;
-      try (intros Hcontra; rewrite Hcontra in *);
-      omega.
+    destruct H0; [ apply IHt1 | apply IHt2 ];
+      try (intros Hcontra; rewrite <- Hcontra in *; simpl in *);
+      solve [ omega | eauto ].
   - apply Id.FSet.singleton_spec in H0.
     congruence.
+Qed.
+
+Definition subst_single x t1 y :=
+  if Id.eq_dec x y then t1
+  else Var y.
+
+Lemma subst_single_preserves_unifies : forall x t0 s t,
+  s x = subst s t0 ->
+  subst s (subst (subst_single x t0) t) = subst s t.
+Proof.
+  intros ? ? ? t ?.
+  induction t; simpl in *; f_equal; eauto.
+  unfold subst_single.
+  destruct (Id.eq_dec x t1); subst; eauto.
 Qed.
