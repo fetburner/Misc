@@ -299,5 +299,26 @@ Proof.
         | H : Some _ = Some _ |- _ => inversion H; clear H
         | |- _ => apply moregen_extend
         end; simpl in *; subst);
-        try solve [ eauto | congruence ].
+        solve [ eauto | congruence ].
 Qed.
+
+Definition unify' : forall c,
+  { s | unifies s c /\ (forall s', unifies s' c -> moregen s' s) } + { forall s, ~unifies s c }.
+Proof.
+  intros c.
+  remember (unify c) as o.
+  destruct o as [ s |].
+  - left.
+    exists s.
+    split.
+    + apply unify_sound; eauto.
+    + intros ? Hunifies.
+      destruct (unify_complete _ _ Hunifies) as [? [H]].
+      rewrite <- Heqo in H.
+      inversion H.
+      eauto.
+  - right.
+    intros ? Hunifies.
+    destruct (unify_complete _ _ Hunifies) as [? [H]].
+    congruence.
+Defined.
