@@ -81,17 +81,12 @@ Module MergeSort (Import X : TotalTransitiveLeBool').
             match ys with
             | [] => fun _ acc => exist _ (rev_append xs' (x :: acc)) _
             | y :: ys' => fun _ acc => 
-                (if x <=? y as b return
-                  x <=? y = b ->
-                  { ws | exists zs, ws = rev zs ++ acc
-                      /\ StronglySorted leb zs
-                      /\ Permutation zs (x :: xs' ++ y :: ys') }
-                then fun _ =>
+                if Sumbool.sumbool_of_bool (x <=? y) then
                   let (zs, H) := merge xs' _ (y :: ys') _ (x :: acc) in
                   exist _ zs _
-                else fun _ =>
+                else
                   let (zs, _) := merge' ys' _ (y :: acc) in
-                  exist _ zs _) eq_refl
+                  exist _ zs _
             end
       end); try clear merge';
       try match goal with
@@ -133,26 +128,31 @@ Module MergeSort (Import X : TotalTransitiveLeBool').
 
   Definition meld : forall xss,
     Forall (StronglySorted leb) xss ->
-    { xss' | length xss' = div2 (S (length xss))
+    forall acc,
+    { zss | exists xss', zss = rev xss' ++ acc /\ length xss' = div2 (S (length xss))
         /\ Forall (StronglySorted leb) xss'
         /\ Permutation (fold_right (@app _) [] xss') (fold_right (@app _) [] xss) }.
   Proof.
     refine (fix meld xss :=
       match xss with
-      | [] => fun _ => exist _ [] _
-      | [xs] => fun _ => exist _ [xs] _
-      | xs :: xs' :: xss' => fun _ =>
+      | [] => fun _ acc => exist _ acc _
+      | [xs] => fun _ acc => exist _ (xs :: acc) _
+      | xs :: xs' :: xss' => fun _ acc =>
           let (ys, _) := merge xs _ xs' _ [] in
-          let (yss, _) := meld xss' _ in
-          exist _ (rev ys :: yss) _
+          let (yss, _) := meld xss' _ (rev ys :: acc) in
+          exist _ yss _
       end); clear meld;
+      repeat match goal with
+      | H : exists _, _ |- _ => destruct H
+      end;
+      [ exists (@nil (list t)) | exists [xs] | | | | exists (rev ys :: x) ];
       repeat (simpl in *; match goal with
       | _ => rewrite app_nil_r in *
       | _ => rewrite rev_involutive in *
       | H : Forall _ (_ :: _) |- _ =>
           inversion H; clear H; subst
       | H : _ /\ _ |- _ => destruct H
-      | H : exists _, _ |- _ => destruct H
+      | _ => rewrite <- app_assoc
       | _ => split
       end; subst); eauto.
     rewrite app_assoc.
@@ -173,19 +173,20 @@ Module MergeSort (Import X : TotalTransitiveLeBool').
           | [] => fun _ _ _ => exist _ [] _
           | [xs] => fun _ _ _ => exist _ xs _
           | xs :: ys :: xss => fun iter_meld _ _ =>
-              let (xss', _) := meld (xs :: ys :: xss) _ in
-              iter_meld xss' _ _ _
+              let (xss', _) := meld (xs :: ys :: xss) _ [] in
+              iter_meld (rev xss') _ _ _
           end)
         (map (fun x => [x]) xs) _ _ in
       exist _ xs' _);
-      simpl in *;
-      repeat rewrite app_nil_r in *;
-      repeat match goal with
+      repeat (simpl in *; match goal with
+      | _ => rewrite app_nil_r in *
+      | _ => rewrite rev_involutive in *
       | H : Forall _ (_ :: _) |- _ =>
           inversion H; clear H; subst
       | H : _ /\ _ |- _ => destruct H
-      end;
-      repeat split;
+      | H : exists _, _ |- _ => destruct H
+      | _ => split
+      end; subst);
       eauto.
     - unfold ltof.
       simpl in *.
