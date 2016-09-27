@@ -24,8 +24,11 @@ Section ARS.
     R x y1 ->
     clos_refl_trans _ R x y2 ->
     joinable y1 y2).
-  Notation normalizing :=
+
+  Notation terminating :=
     (well_founded (fun x y => R y x)).
+  Notation normalizing :=
+    (forall x, exists y, normal_form_of x y).
 
   Hint Constructors clos_refl_trans.
 
@@ -125,47 +128,37 @@ Section ARS.
     eapply rst_trans; eauto.
   Qed.
     
-  Lemma normal_form :
+  Lemma normalizing_confluent_normal_form :
     normalizing ->
     confluent ->
-    (forall x, { y | R x y } + { in_normal_form x }) ->
-    forall x, { y | unique (fun y => normal_form_of x y) y }.
+    forall x, exists! y, normal_form_of x y.
   Proof.
-    intros Hn Hc Hdec x.
-    assert (Hnf : { y | normal_form_of x y }).
-    - induction x as [x IHx] using (Fix Hn).
-      destruct (Hdec x) as [[y HR] |].
-      + destruct (IHx _ HR) as [? []].
-        eauto.
-      + eauto.
-    - destruct Hnf as [y1].
-      exists y1.
-      split.
-      + assumption.
-      + intros ?.
-        apply confluent_most_one_normal_form; eauto.
-  Defined.
+    intros Hn Hc x.
+    destruct (Hn x) as [y].
+    exists y.
+    split.
+    - eauto.
+    - intros ?.
+      apply confluent_most_one_normal_form; eauto.
+  Qed.
 
-  Theorem rst_iff_normal_form_equiv 
-    (Hn : normalizing)
-    (Hc : confluent)
-    (Hdec : forall x, { y | R x y } + { in_normal_form x }) :
-    forall x y,
-    clos_refl_sym_trans _ R x y
-    <-> ` (normal_form Hn Hc Hdec x) = ` (normal_form Hn Hc Hdec y).
+  Theorem rst_iff_normal_form_equiv :
+    confluent ->
+    forall x x' y y',
+    normal_form_of x x' ->
+    normal_form_of y y' ->
+    (clos_refl_sym_trans _ R x y <-> x' = y').
   Proof.
-    intros x y.
-    destruct (normal_form Hn Hc Hdec x) as [x' [[Hrtcx]]]; simpl.
+    intros Hc x x' y y' [Hrtcx] [Hrtcy]. 
     apply clos_rt_clos_rst in Hrtcx.
-    destruct (normal_form Hn Hc Hdec y) as [y' [[Hrtcy]]]; simpl.
     apply clos_rt_clos_rst in Hrtcy.
     split.
     - intros Hrstc.
-      apply confluent_both_normal_form; eauto.
       apply rst_sym in Hrtcx.
+      apply confluent_both_normal_form; eauto.
       eapply rst_trans; eauto.
       eapply rst_trans; eauto.
-    - intros ?; subst.
+    - intros; subst.
       apply rst_sym in Hrtcy.
       eapply rst_trans; eauto.
   Qed.
