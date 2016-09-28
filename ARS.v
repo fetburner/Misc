@@ -1,33 +1,36 @@
-Require Import Relations Program.
+Require Import List Relations Program.
 
 Section ARS.
   Variable A : Set.
   Variable R : A -> A -> Prop.
-  Notation reducible x := (exists y, R x y).
-  Notation in_normal_form x := (forall y, ~R x y).
-  Notation normal_form_of x y :=
+  Definition reducible x := (exists y, R x y).
+  Definition in_normal_form x := (forall y, ~R x y).
+  Arguments in_normal_form x /.
+  Definition normal_form_of x y :=
     (clos_refl_trans _ R x y /\ in_normal_form y).
-  Notation joinable x y :=
+  Arguments normal_form_of x y /.
+  Definition joinable x y :=
     (exists z, clos_refl_trans _ R x z /\ clos_refl_trans _ R y z).
+  Arguments joinable x y /.
 
-  Notation Church_Rosser :=
+  Definition Church_Rosser :=
     (forall x y,
     clos_refl_sym_trans _ R x y ->
     joinable x y).
-  Notation confluent :=
+  Definition confluent :=
     (forall x y1 y2,
     clos_refl_trans _ R x y1 ->
     clos_refl_trans _ R x y2 ->
     joinable y1 y2).
-  Notation semi_confluent :=
+  Definition semi_confluent :=
     (forall x y1 y2,
     R x y1 ->
     clos_refl_trans _ R x y2 ->
     joinable y1 y2).
 
-  Notation terminating :=
+  Definition terminating :=
     (well_founded (fun x y => R y x)).
-  Notation normalizing :=
+  Definition normalizing :=
     (forall x, exists y, normal_form_of x y).
 
   Hint Constructors clos_refl_trans.
@@ -65,7 +68,7 @@ Section ARS.
   Proof.
     intros Hsc x ? Hrstc. 
     apply clos_rst_rst1n_iff in Hrstc.
-    induction Hrstc as [| ? ? ? [ | ] ].
+    induction Hrstc as [| ? ? ? [ | ] ]; simpl.
     - eauto.
     - destruct IHHrstc as [? []].
       eauto.
@@ -129,17 +132,27 @@ Section ARS.
   Qed.
     
   Lemma normalizing_confluent_normal_form :
-    normalizing ->
-    confluent ->
-    forall x, exists! y, normal_form_of x y.
+    normalizing /\ confluent
+    <-> (forall x, exists! y, normal_form_of x y).
   Proof.
-    intros Hn Hc x.
-    destruct (Hn x) as [y].
-    exists y.
     split.
-    - eauto.
-    - intros ?.
-      apply confluent_most_one_normal_form; eauto.
+    - intros [Hn Hc] x.
+      destruct (Hn x) as [y].
+      exists y.
+      split.
+      + eauto.
+      + intros ?.
+        apply confluent_most_one_normal_form; eauto.
+    - intros Hunique.
+      split; intros x; destruct (Hunique x) as [x' []]; eauto.
+      intros y1 y2 ? ?.
+      destruct (Hunique y1) as [y1' [[]]].
+      destruct (Hunique y2) as [y2' [[]]].
+      simpl in *.
+      replace y1' with x' in * by eauto.
+      replace y2' with x' in * by eauto.
+      exists x'.
+      eauto.
   Qed.
 
   Theorem rst_iff_normal_form_equiv :
@@ -162,4 +175,108 @@ Section ARS.
       apply rst_sym in Hrtcy.
       eapply rst_trans; eauto.
   Qed.
+
+  Definition finitely_branching := forall x, exists ys,
+    Forall (R x) ys /\ (forall y, R x y -> In y ys).
+  Definition globally_finite := forall x, exists ys,
+    Forall (clos_trans _ R x) ys
+    /\ (forall y, clos_trans _ R x y -> In y ys).
+
+  Hint Constructors clos_trans.
+
+  Lemma Forall_and_app : forall A (P : A -> Prop) xs ys,
+    Forall P xs ->
+    Forall P ys ->
+    Forall P (xs ++ ys).
+  Proof.
+    intros.
+    apply Forall_forall.
+    intros x HIn.
+    apply in_app_or in HIn.
+    destruct HIn;
+      generalize dependent x;
+      apply Forall_forall;
+      assumption.
+  Qed.
+
+  Lemma clos_trans_inversion : forall A R x z,
+    clos_trans A R x z ->
+    R x z \/ (exists y, R x y /\ clos_trans _ R y z).
+  Proof.
+    intros ? ? ? ? Htc.
+    apply clos_trans_t1n in Htc.
+    inversion Htc as [| ? ? ? Htc' ]; subst.
+    - eauto.
+    - apply clos_t1n_trans in Htc'.
+      eauto.
+  Qed.
+
+  Lemma finitely_branching_impl_globally_finite :
+    terminating ->
+    (forall x,
+    { ys | Forall (R x) ys
+        /\ (forall y, R x y -> In y ys) }) ->
+    forall x,
+    { ys | Forall (clos_trans _ R x) ys
+        /\ (forall y, clos_trans _ R x y -> In y ys) }.
+  Proof.
+    Hint Resolve in_or_app.
+    intros Ht Hfb x.
+    induction x as [x IH] using (Fix Ht).
+    assert (IHy : forall ys acc,
+      Forall (R x) ys ->
+      Forall (clos_trans _ R x) acc ->
+      (forall y, clos_trans _ R x y -> In y acc \/ Exists (fun x' => x' = y \/ clos_trans _ R x' y) ys) ->
+      { ys | Forall (clos_trans A R x) ys /\
+          (forall y, clos_trans A R x y -> In y ys) }).
+    - intros ys.
+      induction ys as [| y ys IHys ]; intros acc Hsound ? Hcomplete.
+      + exists acc.
+        split.
+        * assumption.
+        * { intros ? Htc.
+            destruct (Hcomplete _ Htc) as [| Hcontra ].
+            - assumption.
+            - inversion Hcontra. }
+      + assert (Forall (R x) ys) by (inversion Hsound; subst; eauto).
+        assert (HR : R x y) by (inversion Hsound; subst; eauto).
+        destruct (IH _ HR) as [zs [Hsound0]].
+        apply IHys with (acc := y :: zs ++ acc); eauto.
+        * { constructor.
+            - eauto.
+            - apply Forall_and_app.
+              + eapply Forall_impl; [| apply Hsound0 ].
+                eauto.
+              + eauto. }
+        * { intros y' Htc.
+            destruct (Hcomplete _ Htc) as [| HExists ]; simpl.
+            - eauto.
+            - inversion HExists as [ ? ? [ ? | Htc' ] |];
+                subst;
+                eauto 7. }
+    - destruct (Hfb x) as [ys []].
+      apply IHy with (ys := ys) (acc := []); eauto.
+      intros y Htc.
+      right.
+      apply Exists_exists.
+      apply clos_trans_inversion in Htc.
+      destruct Htc as [ | [ ? [ ? Htc' ] ] ]; eauto.
+  Defined.
 End ARS.
+
+Lemma terminating_transitive_closure A R :
+  terminating A R <-> terminating _ (clos_trans _ R).
+Proof.
+  Local Hint Constructors clos_trans.
+  split;
+    intros Ht x;
+    induction x as [x IH] using (well_founded_induction Ht);
+    constructor;
+    intros y HR;
+    [ apply clos_trans_t1n in HR;
+      inversion HR as [ ? HR' | ? ? HR' HR'' ]; subst;
+      specialize (IH _ HR');
+      [ | apply clos_t1n_trans in HR'';
+          inversion IH; subst ] | ];
+    eauto.
+Qed.
