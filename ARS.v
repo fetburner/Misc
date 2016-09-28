@@ -1,8 +1,18 @@
-Require Import List Relations Program.
+Require Import List Relations Program Omega.
 
 Section ARS.
   Variable A : Set.
   Variable R : A -> A -> Prop.
+
+  Inductive nfold_composition A R : nat -> A -> A -> Prop :=
+    | nfold_composition_ident : forall x,
+        nfold_composition A R 0 x x
+    | nfold_composition_comp : forall n x y z,
+        R x y ->
+        nfold_composition A R n y z ->
+        nfold_composition A R (S n) x z.
+  Hint Constructors nfold_composition.
+
   Definition reducible x := (exists y, R x y).
   Definition in_normal_form x := (forall y, ~R x y).
   Arguments in_normal_form x /.
@@ -181,6 +191,7 @@ Section ARS.
   Definition globally_finite := forall x, exists ys,
     Forall (clos_trans _ R x) ys
     /\ (forall y, clos_trans _ R x y -> In y ys).
+  Definition acyclic := forall x, ~clos_trans _ R x x.
 
   Hint Constructors clos_trans.
 
@@ -262,6 +273,78 @@ Section ARS.
       apply clos_trans_inversion in Htc.
       destruct Htc as [ | [ ? [ ? Htc' ] ] ]; eauto.
   Defined.
+
+  Definition bounded :=
+    forall x, exists n, forall m,
+    n <= m ->
+    forall y, ~nfold_composition _ R m x y.
+
+  Lemma terminating_iff_bounded :
+    finitely_branching ->
+    (terminating <-> bounded).
+  Proof.
+    intros Hfb.
+    split.
+    - intros Ht x.
+      induction x as [ x IH ] using (well_founded_induction Ht).
+      assert (IHys : forall ys,
+        Forall (R x) ys ->
+        forall acc,
+        Forall (R x) acc ->
+        (forall y, R x y -> In y acc \/ In y ys) ->
+        (exists n, forall m,
+        n <= m ->
+        Forall (fun y => forall z,
+          R x y ->
+          nfold_composition _ R m y z ->
+          False) acc) ->
+        exists n, forall m,
+        n <= m ->
+        forall y, ~nfold_composition _ R m x y).
+      + induction 1 as [ | y ? HR ]; intros acc ? Hcomplete [ n Hacc ].
+        * { exists (S n).
+            intros m ? z Hnfold.
+            inversion Hnfold as [ | m' ? ? ? HR ]; subst.
+            - omega.
+            - assert (Hle : n <= m') by omega.
+              specialize (Hacc _ Hle).
+              destruct (Hcomplete _ HR) as [ | Hcontra ].
+              + eapply Forall_forall in Hacc; eauto.
+              + inversion Hcontra. }
+        * { apply IHForall with (acc := y :: acc); eauto.
+            - intros ? HR'.
+              simpl in *.
+              destruct (Hcomplete _ HR') as [ | [ | ] ]; eauto.
+            - specialize (IH _ HR).
+              destruct IH as [ n' IH ].
+              destruct (le_dec n n');
+                [ exists n'
+                | exists n ];
+                intros m ?;
+                (constructor;
+                  [ intros ? HR';
+                    apply IH
+                  | apply Hacc ];
+                  omega). }
+      + destruct (Hfb x) as [ ys [ ] ].
+        apply IHys with (ys := ys) (acc := []);
+          [ | | | exists 0 ];
+          eauto.
+    - intros Hbounded x.
+      destruct (Hbounded x) as [ n Hbounded' ].
+      generalize dependent x.
+      induction n as [ | ? IHn ];
+        intros ? Hbounded';
+        constructor;
+        intros.
+      + exfalso.
+        eapply Hbounded'; eauto.
+      + apply IHn.
+        intros m ? z ?.
+        apply Hbounded' with (m := S m) (y := z).
+        * omega.
+        * eauto.
+  Qed.
 End ARS.
 
 Lemma terminating_transitive_closure A R :
