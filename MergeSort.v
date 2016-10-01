@@ -104,7 +104,7 @@ Proof.
     congruence.
 Qed.
 
-Module MergeSort.
+Section MergeSort.
   Local Coercion is_true : bool >-> Sortclass.
 
   Local Hint Constructors Permutation.
@@ -123,8 +123,7 @@ Module MergeSort.
       { ws | exists zs, ws = rev zs ++ acc /\ StronglySorted leb zs /\ Permutation zs (xs ++ ys) }.
     Proof.
       refine (fix rev_merge xs :=
-        match xs as xs0 return
-          StronglySorted leb xs0 ->
+        match xs as xs0 return StronglySorted leb xs0 ->
           forall ys, StronglySorted leb ys ->
           forall acc,
           { ws | exists zs, ws = rev zs ++ acc
@@ -133,8 +132,7 @@ Module MergeSort.
         | [] => fun _ ys _ acc => exist _ (rev_append ys acc) (ex_intro _ ys _)
         | x :: xs' => fun _ =>
             fix rev_merge' ys :=
-              match ys as ys0 return
-                StronglySorted leb ys0 ->
+              match ys as ys0 return StronglySorted leb ys0 ->
                 forall acc,
                 { ws | exists zs, ws = rev zs ++ acc
                     /\ StronglySorted leb zs
@@ -150,16 +148,17 @@ Module MergeSort.
                     exist _ zs (let (x0, _) := H in ex_intro _ (y :: x0) _)
               end
         end); try clear rev_merge';
-        repeat (simpl in *; match goal with
-        | H : StronglySorted _ (_ :: _) |- _ => inversion H; clear H; subst
-        | H : _ /\ _ |- _ => destruct H
-        | _ => rewrite app_nil_r in *
-        | _ => rewrite rev_append_rev in *
-        | _ => rewrite <- app_assoc
-        | _ => split
-        | _ => apply SSorted_cons
-        | H : leb ?x ?y = false |- _ => destruct (leb_total x y); [ congruence | clear H ]
-        end; subst);
+        repeat (simpl in *;
+            ( rewrite app_nil_r in *
+           || rewrite rev_append_rev in *
+           || rewrite <- app_assoc
+           || match goal with
+              | H : StronglySorted _ (_ :: _) |- _ => inversion H; clear H; subst
+              | H : _ /\ _ |- _ => destruct H
+              | H : leb ?x ?y = false |- _ => destruct (leb_total x y); [ congruence | clear H ]
+              end
+           || split
+           || apply SSorted_cons); subst);
         eauto;
         repeat match goal with
         | H : Forall ?P ?l |- _ =>
@@ -171,12 +170,10 @@ Module MergeSort.
         end.
       - apply (Permutation_in _ H1) in H3.
         apply in_app_iff in H3.
-        destruct H3 as [| HIn]; eauto.
-        inversion HIn; subst; eauto.
+        destruct H3 as [ | [ ] ]; subst; eauto.
       - apply (Permutation_in _ H1) in H3.
         apply in_app_iff with (l := x :: xs') in H3.
-        destruct H3 as [HIn |]; eauto.
-        inversion HIn; subst; eauto.
+        destruct H3 as [ [ ] | ]; subst; eauto.
       - apply Permutation_cons_app with (l1 := x :: xs').
         eauto.
     Defined.
@@ -203,118 +200,130 @@ Module MergeSort.
             let (yss, H2) := meld xss' _ (ys :: acc) in
             exist _ yss (let (zs, _) := H1 in let (zss, _) := H2 in ex_intro _ (zs :: zss) _)
         end);
-        repeat (simpl in *; match goal with
-        | _ => rewrite app_nil_r in *
-        | _ => rewrite rev_involutive in *
-        | H : Forall _ (_ :: _) |- _ =>
-            inversion H; clear H; subst
-        | H : _ /\ _ |- _ => destruct H
-        | H : exists _, _ |- _ => destruct H
-        | _ => rewrite <- app_assoc
-        | _ => split
-        end; subst); eauto.
+        repeat (simpl in *;
+           ( rewrite app_nil_r in *
+          || rewrite rev_involutive in *
+          || rewrite <- app_assoc
+          || match goal with
+             | H : Forall _ (_ :: _) |- _ => inversion H; clear H
+             | H : _ /\ _ |- _ => destruct H
+             | H : exists _, _ |- _ => destruct H
+             end
+          || split); subst); eauto.
       rewrite app_assoc.
       apply Permutation_app; eauto.
     Defined.
 
-    Definition incr : forall xs acc curr prev,
-      Forall (fun x => leb x prev) curr ->
-      StronglySorted (fun x y => leb y x) curr ->
+    Definition splitting : forall xs acc prev,
       Forall (StronglySorted leb) acc ->
-      { xss | Permutation (concat _ xss) (concat _ acc ++ prev :: curr ++ xs)
-          /\ Forall (StronglySorted leb) xss }.
+      { xss | Permutation (concat _ xss) (rev (concat _ acc) ++ prev :: xs)
+           /\ Forall (StronglySorted leb) xss }.
     Proof.
-      refine (fix incr xs :=
+      refine (fix neutral xs :=
+        match xs as xs0 return
+          forall acc prev,
+          Forall (StronglySorted leb) acc ->
+          { xss | Permutation (concat _ xss) (rev (concat _ acc) ++ prev :: xs0)
+               /\ Forall (StronglySorted leb) xss }
+        with 
+        | [] => fun acc prev _ => exist _ ([prev] :: acc) _
+        | x :: xs => fun acc prev _ =>
+            if Sumbool.sumbool_of_bool (leb prev x) then _
+            else _
+        end
+      with incr xs :=
         match xs as xs0 return
           forall acc curr prev,
-          Forall (fun x => leb x prev) curr ->
-          StronglySorted (fun x y => leb y x) curr ->
           Forall (StronglySorted leb) acc ->
-          { xss | Permutation (concat _ xss) (concat _ acc ++ prev :: curr ++ xs0)
-              /\ Forall (StronglySorted leb) xss }
+          StronglySorted (fun x y => leb y x) (prev :: curr) ->
+          { xss | Permutation (concat _ xss) (rev (concat _ acc) ++ rev curr ++ prev :: xs0)
+               /\ Forall (StronglySorted leb) xss }
         with
-        | [] => fun acc curr prev _ _ _ => exist _ (rev_append curr [prev] :: acc) _
-        | x :: xs => fun acc curr prev _ _ _ =>
+        | [] => fun acc curr prev _ _ => exist _ (rev_append curr [prev] :: acc) _
+        | x :: xs => fun acc curr prev _ _ =>
             if Sumbool.sumbool_of_bool (leb prev x) then _
             else _
         end
       with decr xs :=
-        match xs as xs0 return forall acc curr prev,
-          Forall (leb prev) curr ->
-          StronglySorted leb curr ->
+        match xs as xs0 return
+          forall acc curr prev,
           Forall (StronglySorted leb) acc ->
-          { xss | Permutation (concat _ xss) (concat _ acc ++ prev :: curr ++ xs0)
-              /\ Forall (StronglySorted leb) xss } 
+          StronglySorted leb (prev :: curr) ->
+          { xss | Permutation (concat _ xss) (rev (concat _ acc) ++ prev :: curr ++ xs0)
+               /\ Forall (StronglySorted leb) xss }
         with
-        | [] => fun acc curr prev _ _ _ => exist _ ((prev :: curr) :: acc) _
-        | x :: xs => fun acc curr prev _ _ _ =>
+        | [] => fun acc curr prev _ _ => exist _ ((prev :: curr) :: acc) _
+        | x :: xs => fun acc curr prev _ _ =>
             if Sumbool.sumbool_of_bool (leb x prev) then _
             else _
         end
-      for incr);
-      [ 
-      | refine (let (zss, _) := incr xs0 acc (prev :: curr) x _ _ _ in exist _ zss _)
-      | refine (let (zss, _) := decr xs0 (rev curr :: acc) [prev] x _ _ _ in exist _ zss _)
+      for neutral);
+      [
+      | refine (let (xs, _) := incr xs0 acc [prev] x _ _ in exist _ xs _)
+      | refine (let (xs, _) := decr xs0 acc [prev] x _ _ in exist _ xs _)
       | 
-      | refine (let (zss, _) := decr xs0 acc (prev :: curr) x _ _ _ in exist _ zss _)
-      | refine (let (zss, _) := incr xs0 (curr :: acc) [prev] x _ _ _ in exist _ zss _) ];
-      repeat (match goal with
-      | _ => rewrite app_nil_r
-      | _ => rewrite <- app_assoc in *
-      | _ => rewrite rev_append_rev in *
-      | _ => apply Forall_rev
-      | _ => apply StronglySorted_app
-      | _ => apply StronglySorted_rev
-      | H : _ /\ _ |- _ =>  destruct H
-      | H : exists _, _ |- _ => destruct H
-      | |- Forall _ (_ :: _) => constructor
-      | H : Forall _ ?l |- Forall _ ?l => eapply Forall_impl; [| apply H ]; intros
-      | H : leb ?x ?y = false |- _ => destruct (leb_total x y); [ congruence | clear H ]
-      | _ => split
-      end; subst; simpl in *);
+      | refine (let (xs, _) := incr xs0 acc (prev :: curr) x _ _ in exist _ xs _)
+      | refine (let (xs, _) := neutral xs0 (rev_append curr [prev] :: acc) x _ in exist _ xs _)
+      | 
+      | refine (let (xs, _) := decr xs0 acc (prev :: curr) x _ _ in exist _ xs _)
+      | refine (let (xs, _) := neutral xs0 ((prev :: curr) :: acc) x _ in exist _ xs _) ];
+      repeat
+        (( rewrite app_nil_r in *
+        || rewrite <- app_assoc in *
+        || rewrite rev_app_distr in *
+        || rewrite rev_involutive in *
+        || rewrite rev_append_rev in *
+        || apply Forall_rev
+        || apply StronglySorted_app
+        || apply StronglySorted_rev
+        || match goal with
+           | H : _ /\ _ |- _ => destruct H
+           | H : exists _, _ |- _ => destruct H
+           | H : leb ?x ?y = false |- _ => destruct (leb_total x y); [ congruence | clear H ]
+           | H : Forall _ ?l |- Forall _ ?l => eapply Forall_impl; [| apply H ]; intros
+           | H : StronglySorted _ (_ :: _) |- _ => inversion H; subst; clear H
+           | |- Forall _ (_ :: _) => constructor
+           | |- StronglySorted _ (_ :: _) => constructor
+           | _ => split
+           end
+        || split); subst; simpl in *);
       eauto.
-      - etransitivity.
-        + apply Permutation_app_comm.
-        + etransitivity.
-          * apply Permutation_middle.
-          * apply Permutation_app_head.
-            apply Permutation_cons.
-            symmetry.
-            apply Permutation_rev.
-      - etransitivity; eauto.
-        apply Permutation_app_head.
-        apply Permutation_middle with (l1 := prev :: curr).
-      - etransitivity; eauto.
+    - apply Permutation_rev with (l := prev :: concat t acc).
+    - etransitivity.
+      + eassumption.
+      + eapply Permutation_app_head.
+        eauto.
+    - etransitivity.
+      + eapply Permutation_app_comm.
+      + simpl.
         etransitivity.
-        + rewrite app_assoc.
-          apply Permutation_app.
-          * apply Permutation_app_comm.
-          * reflexivity.
-        + rewrite <- app_assoc.
-          apply Permutation_app_head.
-          symmetry.
-          etransitivity.
-          * apply Permutation_middle.
-          * { apply Permutation_app.
-              - apply Permutation_rev.
-              - eauto. }
-      - apply Permutation_app_comm with (l := prev :: curr).
-      - etransitivity; eauto.
-        apply Permutation_app_head.
-        apply Permutation_middle with (l1 := prev :: curr).
-      - etransitivity; eauto.
+        * apply Permutation_cons_append.
+        * rewrite <- app_assoc.
+          apply Permutation_app_tail.
+          apply Permutation_rev.
+    - etransitivity.
+      + eassumption.
+      + apply Permutation_app_head.
         etransitivity.
-        + rewrite app_assoc.
-          apply Permutation_app.
-          * apply Permutation_app_comm.
-          * reflexivity.
-        + rewrite <- app_assoc.
-          apply Permutation_app_head.
-          symmetry.
-          etransitivity.
-          * apply Permutation_middle.
-          * apply Permutation_app_head.
-            eauto.
+        * apply Permutation_middle.
+        * apply Permutation_app_tail.
+          apply Permutation_rev.
+    - etransitivity.
+      + apply Permutation_app_comm with (l := prev :: curr).
+      + apply Permutation_app_tail.
+        apply Permutation_rev.
+    - etransitivity.
+      + eassumption.
+      + apply Permutation_app_head.
+        apply Permutation_middle with (l1 := prev :: curr).
+    - etransitivity.
+      + eassumption.
+      + apply Permutation_app_head.
+        symmetry.
+        etransitivity.
+        * apply Permutation_middle.
+        * apply Permutation_app_tail.
+          apply Permutation_rev.
     Defined.
   End Tools.
 
@@ -328,52 +337,60 @@ Module MergeSort.
     refine (match xs as xs0 return { xs' | StronglySorted leb xs' /\ Permutation xs' xs0 } with
       | [] => exist _ [] _
       | x :: xs =>
-          let (xss, _) := incr _ leb _ _ xs [] [] x _ _ _ in
-          let (xs', _) :=
-            Fix
-              (well_founded_ltof _ (@length _))
-              (fun xss =>
-                forall is_rev : bool,
-                Forall (StronglySorted (if is_rev then fun x y => leb y x else leb)) xss ->
-                Permutation (concat _ xss) (x :: xs) ->
-                { xs' | StronglySorted leb xs' /\ Permutation xs' (x :: xs) })
-              (fun xss =>
-                match xss with
-                | [] => fun _ _ _ _ => exist _ [] _
-                | [xs] => fun _ is_rev _ _ =>
-                    if Sumbool.sumbool_of_bool is_rev then exist _ (rev xs) _
-                    else exist _ xs _
-                | xs :: ys :: xss => fun iter_meld is_rev _ _ =>
-                    if Sumbool.sumbool_of_bool is_rev then
-                      let (xss', _) :=
-                        meld _ (fun x y => leb y x) _ _ (xs :: ys :: xss) _ [] in
-                        iter_meld xss' _ (negb is_rev) _ _
-                    else
-                      let (xss', _) := meld _ leb _ _ (xs :: ys :: xss) _ [] in
-                      iter_meld xss' _ (negb is_rev) _ _
-                end) xss false _ _ in
-          exist _ xs' _
-      end);
-      repeat (simpl in *; match goal with
-      | _ => rewrite rev_length
-      | _ => rewrite map_length
-      | _ => rewrite app_nil_r in *
-      | _ => rewrite concat_rev
-      | _ => apply StronglySorted_rev
-      | _ => apply Forall_rev
-      | _ => apply Forall_map
-      | H : Forall _ (_ :: _) |- _ => inversion H; clear H; subst
-      | H : Forall _ (_ ++ _) |- _ => apply Forall_app_iff in H
-      | H : _ /\ _ |- _ => destruct H
-      | H : exists _, _ |- _ => destruct H
-      | _ => split
-      | H : context [if ?b then _ else _] |- _ => destruct b
-      | H : Forall _ ?l |- Forall _ ?l => eapply Forall_impl; [| apply H ]
-      | |- Permutation (rev ?xs) _ =>
-          apply Permutation_trans with (l' := rev (rev xs));
-          [ apply Permutation_rev
-          | rewrite rev_involutive ]
-      end; subst);
+          let (xss, _) := splitting _ leb _ _ xs [] x _ in
+          (fix iter_meld xss (Hwf : Acc (ltof _ (@length _)) xss) { struct Hwf } :=
+            match xss as xss0 return
+              Acc (ltof _ (@length _)) xss0 ->
+              Forall (StronglySorted leb) xss0 ->
+              Permutation (concat _ xss0) (x :: xs) ->
+              { xs' | StronglySorted leb xs' /\ Permutation xs' (x :: xs) }
+            with
+            | [] => fun _ _ _ => exist _ [] _
+            | [xs] => fun _ _ _ => exist _ xs _
+            | xs :: xs' :: xss => fun Hwf _ _ =>
+                let (xss', _) := meld _ leb _ _ (xs :: xs' :: xss) _ [] in
+                match Hwf with
+                | Acc_intro Hwf' => _
+                end
+            end Hwf
+          with iter_meld_rev xss (Hwf : Acc (ltof _ (@length _)) xss) { struct Hwf } :=
+            match xss as xss0 return
+              Acc (ltof _ (@length _)) xss0 ->
+              Forall (StronglySorted (fun x y => leb y x)) xss0 ->
+              Permutation (concat _ xss0) (x :: xs) ->
+              { xs' | StronglySorted leb xs' /\ Permutation xs' (x :: xs) }
+            with
+            | [] => fun _ _ _ => exist _ [] _
+            | [xs] => fun _ _ _ => exist _ (rev xs) _
+            | xs :: xs' :: xss => fun Hwf _ _ =>
+                let (xss', _) := meld _ (fun x y => leb y x) _ _ (xs :: xs' :: xss) _ [] in
+                match Hwf with
+                | Acc_intro Hwf' => _
+                end
+            end Hwf
+          for iter_meld) xss (well_founded_ltof _ (@length _) _) _ _
+    end);
+    [ | | | | | | | refine (iter_meld_rev xss' (Hwf' _ _) _ _) | | | | | | refine (iter_meld xss' (Hwf' _ _) _ _) | | ];
+      repeat (simpl in *;
+         ( rewrite app_nil_r in *
+        || rewrite rev_length in *
+        || rewrite map_length in *
+        || rewrite concat_rev in *
+        || match goal with
+           | H : Forall _ (_ ++ _) |- _ => apply Forall_app_iff in H
+           | H : Forall _ (_ :: _) |- _ => inversion H; clear H; subst
+           | H : _ /\ _ |- _ => destruct H
+           | H : exists _, _ |- _ => destruct H
+           | H : Forall _ ?l |- Forall _ ?l => eapply Forall_impl; [| apply H ]
+           | |- Permutation (rev ?xs) _ =>
+               apply Permutation_trans with (l' := rev (rev xs));
+               [ apply Permutation_rev
+               | rewrite rev_involutive ]
+           end
+        || apply Forall_rev
+        || apply Forall_map
+        || apply StronglySorted_rev
+        || split); subst);
       eauto.
     - destruct (length xss1).
       + omega.
@@ -390,16 +407,15 @@ Module MergeSort.
   Defined.
 End MergeSort.
 
-Extract Inductive bool => "bool" ["true" "false"].
-Extract Inductive sumbool => "bool" ["true" "false"].
-Extract Inductive list => "list" ["[]" "(::)"].
+Require Import ExtrOcamlBasic ExtrOcamlNatInt Mergesort.
 Extract Constant map => "List.map".
 Extract Constant app => "( @ )".
 Extract Constant rev => "List.rev".
 Extract Constant rev_append => "List.rev_append".
 Extract Constant Sumbool.sumbool_of_bool => "(fun b -> b)".
 Extract Constant negb => "not".
-Extraction "mergeSort.ml" MergeSort.
+Extract Constant NatOrder.leb => "( <= )".
+Extraction "merge_sort.ml" NatSort merge_sort.
 
 (* FUCKIN' HEAVY COMPUTATION *)
 (* Eval compute in NatSort.merge_sort [1; 1; 4; 5; 1; 4]. *)
