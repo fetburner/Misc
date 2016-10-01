@@ -1,4 +1,4 @@
-Require Import List Relations Program Omega.
+Require Import List Ensembles Finite_sets_facts Relations Program Omega.
 
 Section ARS.
   Variable A : Set.
@@ -186,11 +186,8 @@ Section ARS.
       eapply rst_trans; eauto.
   Qed.
 
-  Definition finitely_branching := forall x, exists ys,
-    Forall (R x) ys /\ (forall y, R x y -> In y ys).
-  Definition globally_finite := forall x, exists ys,
-    Forall (clos_trans _ R x) ys
-    /\ (forall y, clos_trans _ R x y -> In y ys).
+  Definition finitely_branching := forall x, Finite _ (R x).
+  Definition globally_finite := forall x, Finite _ (clos_trans _ R x).
   Definition acyclic := forall x, ~clos_trans _ R x x.
 
   Hint Constructors clos_trans.
@@ -224,55 +221,61 @@ Section ARS.
 
   Lemma finitely_branching_impl_globally_finite :
     terminating ->
-    (forall x,
-    { ys | Forall (R x) ys
-        /\ (forall y, R x y -> In y ys) }) ->
-    forall x,
-    { ys | Forall (clos_trans _ R x) ys
-        /\ (forall y, clos_trans _ R x y -> In y ys) }.
+    finitely_branching ->
+    globally_finite.
   Proof.
-    Hint Resolve in_or_app.
+    Hint Constructors Singleton.
     intros Ht Hfb x.
     induction x as [x IH] using (Fix Ht).
-    assert (IHy : forall ys acc,
-      Forall (R x) ys ->
-      Forall (clos_trans _ R x) acc ->
-      (forall y, clos_trans _ R x y -> In y acc \/ Exists (fun x' => x' = y \/ clos_trans _ R x' y) ys) ->
-      { ys | Forall (clos_trans A R x) ys /\
-          (forall y, clos_trans A R x y -> In y ys) }).
-    - intros ys.
-      induction ys as [| y ys IHys ]; intros acc Hsound ? Hcomplete.
-      + exists acc.
-        split.
+    assert (IHHFP : forall P,
+      Finite _ P ->
+      forall Q,
+      Finite _ Q ->
+      Included _ P (R x) ->
+      Included _ Q (clos_trans _ R x) ->
+      Included _ (clos_trans _ R x) (Union _ Q (fun z => exists y, P y /\ (y = z \/ clos_trans _ R y z))) ->
+      Finite _ (clos_trans _ R x)).
+    - induction 1 as [ | P HFP ? y ]; intros ? HFQ HR Htc Hcomplete.
+      + apply Finite_downward_closed with (A := Q).
         * assumption.
-        * { intros ? Htc.
-            destruct (Hcomplete _ Htc) as [| Hcontra ].
-            - assumption.
-            - inversion Hcontra. }
-      + assert (Forall (R x) ys) by (inversion Hsound; subst; eauto).
-        assert (HR : R x y) by (inversion Hsound; subst; eauto).
-        destruct (IH _ HR) as [zs [Hsound0]].
-        apply IHys with (acc := y :: zs ++ acc); eauto.
-        * { constructor.
+        * intros y HIn.
+          apply Hcomplete in HIn.
+          destruct HIn as [ | ? [ ? [ [ ] ] ] ];
+              eauto with v62.
+      + apply IHFinite with (Q := Add _ (Union _ Q (clos_trans _ R y)) y).
+        * { apply Union_preserves_Finite.
+            - apply Union_preserves_Finite.
+              + assumption.
+              + apply IH.
+                apply HR.
+                eauto 7 with v62.
+            - apply Singleton_is_finite. }
+        * eauto 7 with v62.
+        * { intros ? HInQ.
+            destruct HInQ as [ ? [ ] | ? HIn ].
             - eauto.
-            - apply Forall_and_app.
-              + eapply Forall_impl; [| apply Hsound0 ].
-                eauto.
-              + eauto. }
-        * { intros y' Htc.
-            destruct (Hcomplete _ Htc) as [| HExists ]; simpl.
-            - eauto.
-            - inversion HExists as [ ? ? [ ? | Htc' ] |];
-                subst;
-                eauto 7. }
-    - destruct (Hfb x) as [ys []].
-      apply IHy with (ys := ys) (acc := []); eauto.
-      intros y Htc.
+            - assert (HR' : R x y);
+                [ apply HR | ];
+                eauto with v62.
+            - inversion HIn; subst.
+              left.
+              apply HR.
+              eauto with v62. }
+        * intros ? HIntc.
+          specialize (Hcomplete _ HIntc).
+          destruct Hcomplete as [ | ? Hcomplete ];
+            [ | destruct Hcomplete as [? [ [ | ? HSingleton ] Hor ]];
+                  [ | inversion HSingleton ];
+                  destruct Hor ];
+            subst;
+            eauto 7 with v62.
+    - apply IHHFP with (P := R x) (Q := Empty_set _); eauto with v62.
+      intros ? Htc.
       right.
-      apply Exists_exists.
       apply clos_trans_inversion in Htc.
-      destruct Htc as [ | [ ? [ ? Htc' ] ] ]; eauto.
-  Defined.
+      destruct Htc as [ | [ ? [ ] ] ];
+        eauto 7 with v62.
+  Qed.
 
   Definition bounded :=
     forall x, exists n, forall m,
@@ -287,49 +290,58 @@ Section ARS.
     split.
     - intros Ht x.
       induction x as [ x IH ] using (well_founded_induction Ht).
-      assert (IHys : forall ys,
-        Forall (R x) ys ->
-        forall acc,
-        Forall (R x) acc ->
-        (forall y, R x y -> In y acc \/ In y ys) ->
+      assert (IHys : forall P,
+        Finite _ P ->
+        forall Q,
+        Finite _ Q ->
+        Same_set _ (R x) (Union _ P Q) ->
         (exists n, forall m,
         n <= m ->
-        Forall (fun y => forall z,
-          R x y ->
-          nfold_composition _ R m y z ->
-          False) acc) ->
+        Included _ Q (fun y => forall z, ~ nfold_composition _ R m y z)) ->
         exists n, forall m,
         n <= m ->
         forall y, ~nfold_composition _ R m x y).
-      + induction 1 as [ | y ? HR ]; intros acc ? Hcomplete [ n Hacc ].
+      + induction 1 as [ | P ? ? y ]; intros Q ? [ Hsound Hcomplete ] [ n Hacc ].
         * { exists (S n).
             intros m ? z Hnfold.
-            inversion Hnfold as [ | m' ? ? ? HR ]; subst.
+            inversion Hnfold as [ | m' ? ? ? HR Hnfold' ]; subst.
             - omega.
-            - assert (Hle : n <= m') by omega.
-              specialize (Hacc _ Hle).
-              destruct (Hcomplete _ HR) as [ | Hcontra ].
-              + eapply Forall_forall in Hacc; eauto.
-              + inversion Hcontra. }
-        * { apply IHForall with (acc := y :: acc); eauto.
-            - intros ? HR'.
-              simpl in *.
-              destruct (Hcomplete _ HR') as [ | [ | ] ]; eauto.
-            - specialize (IH _ HR).
-              destruct IH as [ n' IH ].
+            - eapply Hacc with (m := m').
+              + omega.
+              + specialize (Hsound _ HR).
+                destruct Hsound as [ ? Hcontra | ? HIn ].
+                * inversion Hcontra.
+                * apply HIn.
+              + apply Hnfold'. }
+        * { assert (HR : R x y) by (apply Hcomplete; eauto with v62).
+            apply IHFinite with (Q := Add _ Q y).
+            - apply Union_preserves_Finite.
+              + assumption.
+              + apply Singleton_is_finite.
+            - split.
+              + intros ? HR'.
+                specialize (Hsound _ HR').
+                destruct Hsound as [ ? [ | ? HSingleton ] | ];
+                  [ | inversion HSingleton; subst | ];
+                  eauto with v62.
+              + intros ? [ ? ? | ? [ ? ? | ? HSingleton ] ];
+                  [ | | inversion HSingleton; subst ];
+                  eauto with v62.
+            - destruct (IH _ HR) as [ n' IH' ].
               destruct (le_dec n n');
                 [ exists n'
                 | exists n ];
-                intros m ?;
-                (constructor;
-                  [ intros ? HR';
-                    apply IH
-                  | apply Hacc ];
-                  omega). }
-      + destruct (Hfb x) as [ ys [ ] ].
-        apply IHys with (ys := ys) (acc := []);
-          [ | | | exists 0 ];
-          eauto.
+                (intros m ? ? [ ? ? | ? HSingleton ];
+                  [ apply Hacc
+                  | inversion HSingleton; subst;
+                    intros z ?;
+                    apply IH' with (m := m) (y := z) ]; eauto); omega. }
+      + apply IHys with (P := R x) (Q := Empty_set _).
+        * apply Hfb.
+        * constructor.
+        * eauto with v62.
+        * exists 0.
+          intros ? ? ? [].
     - intros Hbounded x.
       destruct (Hbounded x) as [ n Hbounded' ].
       generalize dependent x.
@@ -362,4 +374,32 @@ Proof.
       [ | apply clos_t1n_trans in HR'';
           inversion IH; subst ] | ];
     eauto.
+Qed.
+
+Lemma acyclic_and_globally_finite_impl_terminating A R :
+  acyclic A R ->
+  globally_finite _ R ->
+  terminating _ R.
+Proof.
+  intros Hacyclic Hgf.
+  apply terminating_transitive_closure.
+  intros x.
+  destruct (finite_cardinal _ _ (Hgf x)) as [n].
+  generalize dependent x.
+  induction n as [n IH]
+    using (well_founded_induction (well_founded_ltof _ (fun x => x)));
+    unfold ltof in *.
+  intros x Hcardinal.
+  constructor.
+  intros y Htc.
+  destruct (finite_cardinal _ _ (Hgf y)) as [m].
+  apply IH with (y := m); eauto.
+  apply incl_st_card_lt with
+    (X := clos_trans _ R y)
+    (Y := clos_trans _ R x); eauto.
+  split; eauto with v62.
+  intros Heq.
+  apply Hacyclic with (x := y).
+  rewrite Heq.
+  assumption.
 Qed.
