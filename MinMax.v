@@ -3,17 +3,18 @@ Require Import List Relations ZArith Omega Program.
 Section Maximum.
   Variable A : Set.
   Variable max : A -> A -> A.
-  Definition maximum := fold_right max.
+  Definition maximum x xs := fold_left max xs x.
 
   Hypothesis max_select : forall x y, max x y = x \/ max x y = y.
 
-  Theorem maximum_select y xs : y = maximum y xs \/ In (maximum y xs) xs.
+  Theorem maximum_select xs : forall x, In (maximum x xs) (x :: xs).
   Proof.
-    induction xs as [ | x xs ]; simpl.
+    induction xs as [ | x xs ]; simpl; intros x'.
     - eauto.
-    - destruct (max_select x (maximum y xs)) as [ Heq | Heq ];
+    - destruct (max_select x' x) as [ Heq | Heq ];
         rewrite Heq;
-        destruct IHxs;
+        [ destruct (IHxs x')
+        | destruct (IHxs x) ];
         eauto.
   Qed.
 
@@ -22,23 +23,25 @@ Section Maximum.
   Hypothesis le_trans : forall x y z, le x y -> le y z -> le x z.
   Hypothesis max_join : forall x y, le x (max x y) /\ le y (max x y).
 
-  Theorem maximum_join x xs : forall y, x = y \/ In y xs -> le y (maximum x xs).
+  Theorem maximum_join xs : forall x y, In y (x :: xs) -> le y (maximum x xs).
   Proof.
-    induction xs as [ | x' xs ]; simpl in *.
-    - intros ? [ ? | [] ]; subst; eauto.
-    - destruct (max_join x' (maximum x xs)).
-      intros ? [ ? | [ ? | HIn ] ];
-        subst;
-        [ specialize (IHxs _ (or_introl eq_refl)) | | specialize (IHxs _ (or_intror HIn)) ];
+    induction xs as [ | x xs ]; simpl.
+    - intros ? ? [ ? | [] ]; subst; eauto.
+    - intros x' y [ ? | [ ? | ? ] ]; subst.
+      + destruct (max_join y x).
+        specialize (IHxs (max y x) _ (or_introl eq_refl)).
+        eauto.
+      + destruct (max_join x' y).
+        specialize (IHxs (max x' y) _ (or_introl eq_refl)).
+        eauto.
+      + apply IHxs; simpl.
         eauto.
   Qed.
 
-  Definition maximum_spec x xs := conj (maximum_select x xs) (maximum_join x xs).
+  Definition maximum_spec x xs := conj (maximum_select xs x) (maximum_join xs x).
 
-  Definition maximum_concrete
-    (Hassoc : forall x y z, max x (max y z) = max (max x y) z)
-    (Hcomm : forall x y, max x y = max y x) x xs :
-    fold_left max xs x = maximum x xs := fold_symmetric _ Hassoc Hcomm x xs.
+  Definition maximum_concrete x xs :
+    fold_left max xs x = maximum x xs := eq_refl.
 End Maximum.
 
 Section ZMaximum.
@@ -48,8 +51,8 @@ Section ZMaximum.
   Definition Zminimum := maximum _ Z.min.
 
   Corollary Zmaximum_spec : forall x xs,
-    (x = Zmaximum x xs \/ In (Zmaximum x xs) xs) /\
-    (forall y, x = y \/ In y xs -> y <= Zmaximum x xs).
+    (In (Zmaximum x xs) (x :: xs)) /\
+    (forall y, In y (x :: xs) -> y <= Zmaximum x xs).
   Proof.
     apply maximum_spec; try (intros; omega).
     - intros x y.
@@ -59,8 +62,8 @@ Section ZMaximum.
   Qed.
 
   Corollary Zminimum_spec : forall x xs,
-    (x = Zminimum x xs \/ In (Zminimum x xs) xs) /\
-    (forall y, x = y \/ In y xs -> y >= Zminimum x xs).
+    In (Zminimum x xs) (x :: xs) /\
+    (forall y, In y (x :: xs) -> y >= Zminimum x xs).
   Proof.
     apply maximum_spec; try (intros; omega).
     - intros x y.
@@ -72,27 +75,21 @@ Section ZMaximum.
   Corollary neg_Zmaximum_distr x xs :
     - Zmaximum x xs = Zminimum (- x) (map Z.opp xs).
   Proof.
-    destruct (Zmaximum_spec x xs) as [ HIn Hmax ].
-    destruct (Zminimum_spec (- x) (map Z.opp xs)) as [ HIn' Hmin ].
-    assert (HIn1 : - x = - Zmaximum x xs \/ In (- Zmaximum x xs) (map Z.opp xs)).
-    { destruct HIn.
-      - left.
-        omega.
-      - right. 
-        apply in_map.
-        eauto. }
-    assert (HIn2 : x = - Zminimum (- x) (map Z.opp xs) \/ In (- Zminimum (- x) (map Z.opp xs)) xs).
-    { destruct HIn' as [ | HIn' ].
-      - left.
-        omega.
-      - right.
-        apply in_map_iff in HIn'.
-        destruct HIn' as [ ? [ Heq ? ]].
-        rewrite <- Heq.
-        rewrite Z.opp_involutive.
-        eauto. }
-    specialize (Hmax _ HIn2).
-    specialize (Hmin _ HIn1).
+    destruct (Zmaximum_spec x xs) as [ HmaxIn Hmax ].
+    destruct (Zminimum_spec (- x) (map Z.opp xs)) as [ HminIn Hmin ].
+
+    assert (HmaxIn' : In (- Zmaximum x xs) (map Z.opp (x :: xs))).
+    { apply in_map. eauto. }
+    specialize (Hmin _ HmaxIn').
+
+    assert (HminIn' : In (- Zminimum (- x) (map Z.opp xs)) (map Z.opp (map Z.opp (x :: xs)))).
+    { apply in_map. eauto. }
+    rewrite map_map in HminIn'.
+    rewrite map_ext with (f := fun x => - - x) (g := id) in HminIn'
+      by (unfold id; intros; omega).
+    rewrite map_id in HminIn'.
+    specialize (Hmax _ HminIn').
+
     omega.
   Qed.
 
@@ -107,17 +104,13 @@ Section ZMaximum.
       + rewrite <- map_id.
         repeat rewrite map_map.
         apply map_ext.
-        intros ?.
+        intros.
         omega.
   Qed.
 
   Corollary Zmaximum_concrete : forall x xs,
     fold_left Z.max xs x = Zmaximum x xs.
-  Proof.
-    apply maximum_concrete.
-    - apply Z.max_assoc.
-    - apply Z.max_comm.
-  Qed.
+  Proof. apply maximum_concrete. Qed.
 End ZMaximum.
 
 Section MinMax.
@@ -248,7 +241,7 @@ Section MinMax.
       [ left | right ];
       repeat split; eauto.
     rewrite Zmaximum_concrete.
-    apply (proj2 (Zmaximum_spec _ _)).
+    apply (proj2 (Zmaximum_spec _ _)). simpl.
     eauto.
   Qed.
 
