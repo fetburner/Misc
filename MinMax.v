@@ -69,28 +69,30 @@ Section ZMaximum.
       destruct (Zmin_spec x y) as [[]|[]]; omega.
   Qed.
 
-  Theorem neg_Zmaximum_distr x xs :
+  Corollary neg_Zmaximum_distr x xs :
     - Zmaximum x xs = Zminimum (- x) (map Z.opp xs).
   Proof.
-    (destruct (Zmaximum_spec x xs) as [ [ ? | ? ] Hmax ];
-      assert (HIn1 : - x = - Zmaximum x xs \/ In (- Zmaximum x xs) (map Z.opp xs));
-      [ left;
-        omega | 
-      | right; 
-        apply in_map;
-        eauto | ]);
-    (destruct (Zminimum_spec (- x) (map Z.opp xs)) as [ [ ? | HIn0 ] Hmin ];
-      assert (HIn2 : x = - Zminimum (- x) (map Z.opp xs) \/ In (- Zminimum (- x) (map Z.opp xs)) xs);
-      [ left;
-        omega | 
-      | right;
-        apply in_map_iff in HIn0;
-        destruct HIn0 as [ ? [ Heq ? ]];
-        rewrite <- Heq;
-        rewrite Z.opp_involutive;
-        eauto | ]);
-    specialize (Hmax _ HIn2);
-    specialize (Hmin _ HIn1);
+    destruct (Zmaximum_spec x xs) as [ HIn Hmax ].
+    destruct (Zminimum_spec (- x) (map Z.opp xs)) as [ HIn' Hmin ].
+    assert (HIn1 : - x = - Zmaximum x xs \/ In (- Zmaximum x xs) (map Z.opp xs)).
+    { destruct HIn.
+      - left.
+        omega.
+      - right. 
+        apply in_map.
+        eauto. }
+    assert (HIn2 : x = - Zminimum (- x) (map Z.opp xs) \/ In (- Zminimum (- x) (map Z.opp xs)) xs).
+    { destruct HIn' as [ | HIn' ].
+      - left.
+        omega.
+      - right.
+        apply in_map_iff in HIn'.
+        destruct HIn' as [ ? [ Heq ? ]].
+        rewrite <- Heq.
+        rewrite Z.opp_involutive.
+        eauto. }
+    specialize (Hmax _ HIn2).
+    specialize (Hmin _ HIn1).
     omega.
   Qed.
 
@@ -209,9 +211,9 @@ Section MinMax.
     beta <= fold_left Z.max (map minimax xs) alpha /\ beta <= Zmaximum_with_alpha alphabeta alpha beta xs.
   Proof.
     intros Halphabeta_spec.
-    induction xs as [ | x xs ]; simpl; intros alpha Halphabeta.
+    induction xs as [ | x xs ]; simpl; intros alpha ?.
     - omega.
-    - destruct (Halphabeta_spec alpha x Halphabeta) as [ [ ] | [ [ ? [ Heq ] ] | [ ] ]].
+    - destruct (Halphabeta_spec alpha x) as [ [ ] | [ [ ? [ Heq ] ] | [ ] ]]; eauto.
       + destruct (Z_le_dec beta (alphabeta alpha x)); [ omega | ].
         repeat rewrite Z.max_l by assumption.
         apply IHxs; assumption.
@@ -278,7 +280,7 @@ Section MinMax.
     intros n.
     induction n as [ | n ]; simpl; intros b beta.
     - intros; omega.
-    - destruct (succ b) as [ | b_ bs ]; intros turn alpha Halphabeta.
+    - destruct (succ b) as [ | b_ bs ]; intros turn alpha ?.
       + omega.
       + rewrite map_map.
         destruct (Z_lt_dec alpha (Zmaximum (- negmax (negb turn) b_ n)
@@ -288,10 +290,9 @@ Section MinMax.
              with (Zmaximum alpha (map (fun x => - negmax (negb turn) x n) (b_ :: bs))).
           { rewrite <- Zmaximum_concrete.
             apply (Zmaximum_with_alpha_spec _ _
-              (fun alpha b => - alphabeta (negb turn) (- beta) (- alpha) b n) _ beta (b_ :: bs) Halphabeta).
+              (fun alpha b => - alphabeta (negb turn) (- beta) (- alpha) b n) _ beta (b_ :: bs)); eauto.
             intros alpha0 b0 ?.
-            assert (Halphabeta0 : -beta < -alpha0) by omega.
-            destruct (IHn b0 (- alpha0) (negb turn) (- beta) Halphabeta0) as [ [] | [ [ ? [] ] | [ ] ] ]; omega. }
+            destruct (IHn b0 (- alpha0) (negb turn) (- beta)) as [ [] | [ [ ? [] ] | [ ] ] ]; omega. }
           { destruct (Zmaximum_spec (- negmax (negb turn) b_ n) (map (fun b => - negmax (negb turn) b n) bs)) as [ HIn1 Hmax1 ].
             destruct (Zmaximum_spec alpha (map (fun b => - negmax (negb turn) b n) (b_ :: bs))) as [ [ | HIn2 ] Hmax2 ];
               specialize (Hmax2 _ (or_intror HIn1)).
@@ -310,9 +311,8 @@ Section MinMax.
               omega. }
           destruct (Zmaximum_with_alpha_spec _
             (fun b => - negmax (negb turn) b n)
-            (fun alpha b => - alphabeta (negb turn) (- beta) (- alpha) b n) alpha beta (b_ :: bs) Halphabeta) as [ [ ? [ ] ] | [ ] ]; simpl in *; try omega.
+            (fun alpha b => - alphabeta (negb turn) (- beta) (- alpha) b n) alpha beta (b_ :: bs)) as [ [ ? [ ] ] | [ ] ]; simpl in *; try omega.
           intros alpha0 b0 ?.
-          assert (Halphabeta0 : -beta < -alpha0) by omega.
-          destruct (IHn b0 (- alpha0) (negb turn) (- beta) Halphabeta0) as [ [] | [ [ ? [] ] | [ ] ] ]; omega.
+          destruct (IHn b0 (- alpha0) (negb turn) (- beta)) as [ [] | [ [ ? [] ] | [ ] ] ]; omega.
   Qed.
 End MinMax.
