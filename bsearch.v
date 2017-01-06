@@ -1,12 +1,12 @@
 Require Import Arith Div2 Omega Recdef.
 
-Function bsearch (p : nat -> bool) n { wf lt n } :=
+Function bsearch_aux (p : nat -> bool) offset n { wf lt n } :=
   match n with
-  | O => 0
+  | O => offset
   | _ =>
       let m := div2 n in
-      if p m then bsearch p m
-      else S m + bsearch (fun x => p (S m + x)) (n - S m)
+      if p (offset + m) then bsearch_aux p offset m
+      else bsearch_aux p (S m + offset) (n - S m)
   end.
 Proof.
   + intros. apply lt_div2. omega.
@@ -14,61 +14,84 @@ Proof.
   + apply lt_wf.
 Defined.
 
-Lemma bsearch_correct : forall n p n0,
-  (forall n, n0 <= n -> p n = true) ->
-  (forall n, p n = true -> n0 <= n) ->
-  n0 <= n ->
-  bsearch p n = n0.
+Lemma bsearch_aux_spec : forall p n offset error,
+  (forall n, offset + error <= n -> p n = true) ->
+  (forall n, p n = true -> offset + error <= n) ->
+  error <= n ->
+  bsearch_aux p offset n = offset + error.
 Proof.
-  intros n.
+  intros p n.
   induction n as [[| n'] IHn] using lt_wf_ind;
-    intros ? ? H H' ?;
-    rewrite bsearch_equation.
-  + omega.
-  + remember (p (div2 (S n'))) as b.
+    intros offset error H H' ?;
+    rewrite bsearch_aux_equation.
+  - omega.
+  - remember (p (offset + div2 (S n'))) as b.
+    symmetry in Heqb.
     destruct b.
-    - apply IHn; eauto.
-      apply lt_div2.
-      omega.
-    - destruct (le_dec n0 (div2 (S n'))) as [ Hle |].
+    + apply IHn; eauto.
+      * apply lt_div2.
+        omega.
+      * specialize (H' _ Heqb).
+        omega.
+    + destruct (le_dec (offset + error) (offset + div2 (S n'))) as [ Hle | ].
       * apply H in Hle.
         congruence.
-      * { rewrite IHn with (n0 := n0 - S (div2 (S n'))); try omega.
-          + intros.
+      * { rewrite IHn with (error := error - S (div2 (S n'))); try omega.
+          - intros ? ?.
             apply H.
             omega.
-          + intros ? Hp.
-            apply H' in Hp.
-            omega.
-        }
+          - intros ? Hp.
+            specialize (H' _ Hp).
+            omega. }
 Qed.
 
-Definition bsearch' p n :=
-  bsearch (fun x => negb (p (S x))) n.
+Definition bsearch p alpha beta :=
+  bsearch_aux p alpha (beta - alpha).
 
-Lemma bsearch'_correct : forall n p n0,
-  (forall n, n <= n0 -> p n = true) ->
-  (forall n, p n = true -> n <= n0) ->
-  n0 <= n ->
-  bsearch' p n = n0.
+Theorem bsearch_spec : forall p threshold,
+  (forall n, threshold <= n -> p n = true) ->
+  (forall n, p n = true -> threshold <= n) ->
+  forall alpha beta,
+  alpha <= threshold <= beta ->
+  bsearch p alpha beta = threshold.
+Proof.
+  unfold bsearch.
+  intros ? ? H H' alpha beta ?.
+  rewrite bsearch_aux_spec with (error := threshold - alpha); try omega.
+  - intros ? ?.
+    apply H.
+    omega.
+  - intros ? Htrue.
+    specialize (H' _ Htrue).
+    omega.
+Qed.
+
+Definition bsearch' p alpha beta :=
+  bsearch (fun x => negb (p (S x))) alpha beta.
+
+Lemma bsearch'_spec : forall p threshold,
+  (forall n, n <= threshold -> p n = true) ->
+  (forall n, p n = true -> n <= threshold) ->
+  forall alpha beta,
+  alpha <= threshold <= beta ->
+  bsearch' p alpha beta = threshold.
 Proof.
   unfold bsearch'.
-  intros ? ? n0 H H' ?.
-  rewrite bsearch_correct with (n0 := n0); try omega.
-  + intros n1 ?.
-    remember (p (S n1)) as b.
+  intros ? ? H H' ? ? ?.
+  rewrite bsearch_spec with (threshold := threshold); try omega.
+  - intros n ?.
+    remember (p (S n)) as b.
     symmetry in Heqb.
     destruct b; simpl.
-    - apply H' in Heqb.
+    + specialize (H' _ Heqb).
       omega.
-    - reflexivity.
-  + intros n1 Hp.
-    destruct (le_dec (S n1) n0) as [ Hle |].
-    - apply H in Hle.
-      rewrite Hle in Hp.
+    + reflexivity.
+  - intros n Hp.
+    destruct (le_dec (S n) threshold) as [ Hle | ].
+    + rewrite (H _ Hle) in *.
       simpl in Hp.
       congruence.
-    - omega.
+    + omega.
 Qed.
 
 (* sqrt 4 *)
@@ -76,7 +99,7 @@ Eval compute in
   (bsearch
     (fun n =>
       if le_dec 4 (n * n) then true
-      else false) 10).
+      else false) 0 10).
 
 Extract Inductive bool => "bool" ["true" "false"].
 Extract Inductive nat => int ["0" "succ"] "(fun fO fS n -> if n = 0 then fO () else fS (n-1))".
