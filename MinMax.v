@@ -162,24 +162,21 @@ Section MinMax.
         end
     end.
 
-  Theorem negmax_corresponds_minimax : forall n b,
-    minimax b n = negmax true b n /\
-    negmax false b n = - minimax' b n.
+  Theorem negmax_corresponds_minimax n : forall b turn,
+    negmax turn b n = if turn then minimax b n else - minimax' b n.
   Proof.
-    intros n.
-    induction n as [ | n ]; intros b0; simpl.
-    - eauto.
-    - destruct (succ b0) as [ | b bs ].
-      + eauto.
-      + split.
-        * rewrite map_map.
-          f_equal; [ | apply map_ext; intros ? ];
-            rewrite (proj2 (IHn _));
-            omega.
-        * rewrite <- neg_Zminimum_distr.
-          do 2 f_equal; [ | apply map_ext; intros ? ];
-            rewrite (proj1 (IHn _));
-            omega.
+    induction n as [ | n ]; simpl.
+    - intros ? []; reflexivity.
+    - intros b0 [];
+        destruct (succ b0); eauto.
+      + rewrite map_map.
+        f_equal; [ | apply map_ext; intros ? ];
+          rewrite (IHn _); simpl;
+          omega.
+      + rewrite <- neg_Zminimum_distr.
+        do 2 f_equal; [ | apply map_ext; intros ? ];
+          rewrite (IHn _); simpl;
+          omega.
   Qed.
 
   Definition Zmaximum_with_alpha {A} alphabeta alpha beta := (fix Zmaximum_with_alpha alpha (xs : list A) :=
@@ -231,17 +228,18 @@ Section MinMax.
       minimax x <= alpha /\ alphabeta alpha x <= alpha \/
       alpha <= minimax x /\ minimax x = alphabeta alpha x /\ minimax x < beta \/
       beta <= minimax x /\ beta <= alphabeta alpha x) ->
-    alpha <= fold_left Z.max (map minimax xs) alpha /\
-    fold_left Z.max (map minimax xs) alpha = Zmaximum_with_alpha alphabeta alpha beta xs /\
-    fold_left Z.max (map minimax xs) alpha < beta \/
-    beta <= fold_left Z.max (map minimax xs) alpha /\ beta <= Zmaximum_with_alpha alphabeta alpha beta xs.
+    alpha <= Zmaximum alpha (map minimax xs) /\
+    Zmaximum alpha (map minimax xs) = Zmaximum_with_alpha alphabeta alpha beta xs /\
+    Zmaximum alpha (map minimax xs) < beta \/
+    beta <= Zmaximum alpha (map minimax xs) /\ beta <= Zmaximum_with_alpha alphabeta alpha beta xs.
   Proof.
     intros Halphabeta Halphabeta_spec.
+    rewrite <- Zmaximum_concrete.
     destruct (Zmaximum_with_alpha_spec_aux _ _ _ _ xs Halphabeta_spec _ Halphabeta) as [ [ ] | [ ] ];
       [ left | right ];
       repeat split; eauto.
     rewrite Zmaximum_concrete.
-    apply (proj2 (Zmaximum_spec _ _)). simpl.
+    apply (proj2 (Zmaximum_spec _ _)). left.
     eauto.
   Qed.
 
@@ -281,8 +279,7 @@ Section MinMax.
         * right.
           replace (Zmaximum (- negmax (negb turn) b_ n) (map (fun x => - negmax (negb turn) x n) bs))
              with (Zmaximum alpha (map (fun x => - negmax (negb turn) x n) (b_ :: bs))).
-          { rewrite <- Zmaximum_concrete.
-            apply (Zmaximum_with_alpha_spec _ _
+          { apply (Zmaximum_with_alpha_spec _ _
               (fun alpha b => - alphabeta (negb turn) (- beta) (- alpha) b n) _ beta (b_ :: bs)); eauto.
             intros alpha0 b0 ?.
             destruct (IHn b0 (- alpha0) (negb turn) (- beta)) as [ [] | [ [ ? [] ] | [ ] ] ]; omega. }
@@ -293,12 +290,11 @@ Section MinMax.
             - specialize (Hmax1 _ HIn2).
               omega. }
         * left.
-          assert (fold_left Z.max (map (fun b => - negmax (negb turn) b n) (b_ :: bs)) alpha = alpha).
-          { rewrite Zmaximum_concrete.
-            destruct (Zmaximum_spec (- negmax (negb turn) b_ n) (map (fun b => - negmax (negb turn) b n) bs)) as [ HIn1 Hmax1 ].
+          assert (Zmaximum alpha (map (fun b => - negmax (negb turn) b n) (b_ :: bs)) = alpha).
+          { destruct (Zmaximum_spec (- negmax (negb turn) b_ n) (map (fun b => - negmax (negb turn) b n) bs)) as [ HIn1 Hmax1 ].
             destruct (Zmaximum_spec alpha (map (fun b => - negmax (negb turn) b n) (b_ :: bs))) as [ [ | HIn2 ] Hmax2 ].
             - omega.
-            - generalize (Hmax2 _ (or_intror HIn1)). intros ?.
+            - generalize (Hmax2 _ (or_intror HIn1)). intros.
               specialize (Hmax2 _ (or_introl eq_refl)).
               specialize (Hmax1 _ HIn2).
               omega. }
