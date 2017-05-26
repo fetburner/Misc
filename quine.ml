@@ -1,0 +1,1 @@
+(fun x y z->Printf.printf y(string_of_format y)z x)"(fun x y z->Printf.printf y(string_of_format y)z x)""int main(){char*x=%S,*y=%S,*z=%S;printf(y,34,y,34,34,z,34,34,x,34);}""(fn q=>fn x=>fn y=>fn z=>print(y^q^y^q^q^z^q^q^x^q))(str(chr 34))%c%s%c%c%s%c%c%s%c"
