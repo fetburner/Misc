@@ -11,28 +11,16 @@ Proof.
     (fun n => (forall m, m < n -> ~ P m) -> { n | P n })
     (fun n eps HnP =>
       if HPdec n then exist _ n _
-      else eps (S n) _ _) 0 _).
-  - destruct Hex as [ n HP ].
-    intros m.
-    remember (n - m) as p.
-    generalize dependent m.
+      else eps (S n) _ _) 0 _); eauto.
+  - destruct Hex as [ n HP ]. intros m.
+    remember (n - m) as p. generalize dependent m.
     induction p as [ | p ]; intros m Heqp; constructor; intros ? [? HnP]; subst.
-    + destruct (HnP n).
-      * omega.
-      * eauto.
-    + apply IHp.
-      omega.
-  - assumption.
-  - split.
-    + reflexivity.
-    + intros m ?.
-      destruct (eq_nat_dec n m).
-      * subst. assumption.
-      * apply HnP. omega.
-  - intros m ?.
-    destruct (eq_nat_dec n m).
-    + subst. assumption.
-    + apply HnP. omega.
+    + destruct (HnP n); eauto; omega.
+    + apply IHp. omega.
+  - split; eauto. intros m ?. destruct (Nat.eq_dec n m); subst; eauto.
+    apply HnP. omega.
+  - intros m ?. destruct (Nat.eq_dec n m); subst; eauto.
+    apply HnP. omega.
   - intros ? ?. omega.
 Defined.
 
@@ -43,11 +31,7 @@ Theorem eps A (P : A -> Prop) (f : nat -> A) :
   { x | P x }.
 Proof.
   intros Hsurj HPdec Hex.
-  destruct (nat_eps (fun n => P (f n))).
-  - intros ?.
-    apply HPdec.
-  - destruct Hex as [ x ].
-    destruct (Hsurj x); subst.
-    eauto.
-  - eauto.
+  destruct (nat_eps (fun n => P (f n))); eauto.
+  - intros. apply HPdec.
+  - destruct Hex as [ x ]. destruct (Hsurj x). subst. eauto.
 Defined.
