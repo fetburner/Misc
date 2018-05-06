@@ -1,6 +1,51 @@
 Require Import Arith Div2 List Orders Sorted Permutation Program.
 Require Omega.
 
+Local Coercion is_true : bool >-> Sortclass.
+
+Local Hint Constructors StronglySorted.
+
+Section RevMerge.
+  Variable t : Set.
+  Variable leb : t -> t -> bool.
+  Hypothesis leb_total : forall x y, leb x y \/ leb y x.
+  Hypothesis leb_trans : Transitive leb.
+  Hint Resolve leb_trans.
+
+  Fixpoint rev_merge' xs :=
+    match xs with
+    | [] => @rev_append _
+    | x :: xs => fix rev_merge_inner ys :=
+        match ys with
+        | [] => rev_append (x :: xs)
+        | y :: ys => fun acc =>
+            if leb x y
+            then rev_merge' xs (y :: ys) (x :: acc)
+            else rev_merge_inner ys (y :: acc)
+        end
+    end.
+
+  Lemma rev_merge_perm' xs : forall ys acc,
+    exists zs,
+    rev_merge' xs ys acc = zs ++ acc /\
+    Permutation zs (xs ++ ys).
+  Proof.
+    Local Hint Resolve Permutation_rev Permutation_sym.
+    induction xs as [ | x xs ]; simpl.
+    - intros ? ?. rewrite rev_append_rev. eauto.
+    - intros ys. induction ys as [ | y ys ]; intros acc.
+      + rewrite rev_append_rev.
+
+      + rewrite rev_append_rev.
+        exists (rev (x :: xs)). split.
+        * simpl. rewrite <- app_assoc. reflexivity.
+        * rewrite app_nil_r. eauto.
+      + destruct (leb x y) eqn:Heqb.
+        * simpl.
+
+
+
+
 Local Hint Constructors StronglySorted.
 
 Lemma Forall_app_iff A (P : A -> Prop) xs ys :
@@ -116,6 +161,20 @@ Section MergeSort.
     Hypothesis leb_trans : Transitive leb.
     Hint Resolve leb_trans.
 
+    Fixpoint rev_merge xs :=
+      match xs with
+      | [] => rev_append
+      | x :: xs => fix rev_merge_inner ys :=
+          match ys with
+          | [] => rev_append (x :: xs)
+          | y :: ys => fun acc =>
+              if leb x y
+              then rev_merge xs (y :: ys) (x :: acc)
+              else rev_merge (x :: xs) ys (y :: acc)
+          end
+      end.
+
+
     Definition rev_merge :
       forall xs, StronglySorted leb xs ->
       forall ys, StronglySorted leb ys ->
@@ -139,7 +198,7 @@ Section MergeSort.
                     /\ Permutation zs (x :: xs' ++ ys0) }
               with
               | [] => fun _ acc => exist _ (rev_append xs' (x :: acc)) (ex_intro _ (x :: xs') _)
-              | y :: ys' => fun _ acc => 
+              | y :: ys' => fun _ acc =>
                   if Sumbool.sumbool_of_bool (leb x y) then
                     let (zs, H) := rev_merge xs' _ (y :: ys') _ (x :: acc) in
                     exist _ zs (let (x0, _) := H in ex_intro _ (x :: x0) _)
@@ -225,7 +284,7 @@ Section MergeSort.
           Forall (StronglySorted leb) acc ->
           { xss | Permutation (concat _ xss) (rev (concat _ acc) ++ prev :: xs0)
                /\ Forall (StronglySorted leb) xss }
-        with 
+        with
         | [] => fun acc prev _ => exist _ ([prev] :: acc) _
         | x :: xs => fun acc prev _ =>
             if Sumbool.sumbool_of_bool (leb prev x) then _
@@ -261,10 +320,10 @@ Section MergeSort.
       [
       | refine (let (xs, _) := incr xs0 acc [prev] x _ _ in exist _ xs _)
       | refine (let (xs, _) := decr xs0 acc [prev] x _ _ in exist _ xs _)
-      | 
+      |
       | refine (let (xs, _) := incr xs0 acc (prev :: curr) x _ _ in exist _ xs _)
       | refine (let (xs, _) := neutral xs0 (rev_append curr [prev] :: acc) x _ in exist _ xs _)
-      | 
+      |
       | refine (let (xs, _) := decr xs0 acc (prev :: curr) x _ _ in exist _ xs _)
       | refine (let (xs, _) := neutral xs0 ((prev :: curr) :: acc) x _ in exist _ xs _) ];
       repeat
