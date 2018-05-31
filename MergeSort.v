@@ -1,469 +1,419 @@
-Require Import Arith Div2 List Orders Sorted Permutation Program.
+Require Import List Orders Sorted Permutation Program.
 Require Omega.
 
-Local Coercion is_true : bool >-> Sortclass.
+Definition Forall_forall' A P xs := proj1 (@Forall_forall A P xs).
+Definition Forall_forall_inv A P xs := proj2 (@Forall_forall A P xs).
+Hint Resolve Forall_forall_inv.
 
-Local Hint Constructors StronglySorted.
+Lemma Forall_app A P xs ys : @Forall A P xs -> Forall P ys -> Forall P (xs ++ ys).
+Proof.
+  intros Hxs Hys. apply Forall_forall. intros ? HIn.
+  destruct (in_app_or _ _ _ HIn); [ clear Hys | clear Hxs ]; eapply Forall_forall; eauto.
+Qed.
+
+Lemma Forall_rev A P xs : @Forall A P xs -> Forall P (rev xs).
+Proof.
+  intros. apply Forall_forall. intros. eapply Forall_forall; eauto. apply in_rev. eauto.
+Qed.
+
+Hint Resolve Forall_app Forall_rev.
+
+Hint Constructors StronglySorted.
+
+Section StronglySorted.
+  Lemma StronglySorted_app A le xs ys :
+    StronglySorted le ys ->
+    StronglySorted le xs ->
+    @Forall A (fun x => Forall (le x) ys) xs ->
+    StronglySorted le (xs ++ ys).
+  Proof.
+    induction 2; inversion 1; subst; simpl; eauto.
+  Qed.
+
+  Lemma StronglySorted_rev A le (xs : list A) :
+    StronglySorted le xs ->
+    StronglySorted (fun x y => le y x) (rev xs).
+  Proof.
+    induction 1; simpl; eauto.
+    apply StronglySorted_app; eauto.
+    eapply Forall_rev, Forall_impl; [ | eassumption ]. eauto.
+  Qed.
+End StronglySorted.
+
+Hint Resolve StronglySorted_rev.
 
 Section RevMerge.
   Variable t : Set.
-  Variable leb : t -> t -> bool.
-  Hypothesis leb_total : forall x y, leb x y \/ leb y x.
-  Hypothesis leb_trans : Transitive leb.
-  Hint Resolve leb_trans.
+  Variable le1 : t -> t -> Prop.
+  Hypotheses le1_total : forall x y, { le1 x y } + { ~ le1 x y /\ le1 y x }.
 
   Fixpoint rev_merge' xs :=
     match xs with
     | [] => @rev_append _
-    | x :: xs => fix rev_merge_inner ys :=
+    | x :: xs => fix rev_merge'_inner ys :=
         match ys with
         | [] => rev_append (x :: xs)
         | y :: ys => fun acc =>
-            if leb x y
+            if le1_total x y
             then rev_merge' xs (y :: ys) (x :: acc)
-            else rev_merge_inner ys (y :: acc)
+            else rev_merge'_inner ys (y :: acc)
         end
     end.
 
-  Lemma rev_merge_perm' xs : forall ys acc,
-    exists zs,
-    rev_merge' xs ys acc = zs ++ acc /\
-    Permutation zs (xs ++ ys).
+  Definition rev_merge xs ys := rev_merge' xs ys [].
+
+  Variable le2 : t -> t -> Prop.
+  Hypotheses le1_trans : forall x y z, le1 x y -> le1 y z -> le1 x z.
+  Hypotheses le2_trans : forall x y z, le2 x y -> le2 y z -> le2 x z.
+
+  Definition lexord x y := le1 x y /\ (le1 y x -> le2 x y).
+
+  Lemma lexord_trans x y z : lexord x y -> lexord y z -> lexord x z.
+  Proof. intros [ ] [ ]. split; eauto 6. Qed.
+
+  Local Hint Constructors Forall Permutation.
+
+  Lemma rev_merge'_perm xs : forall ys acc, Permutation (rev_merge' xs ys acc) (xs ++ ys ++ acc).
   Proof.
-    Local Hint Resolve Permutation_rev Permutation_sym.
-    induction xs as [ | x xs ]; simpl.
-    - intros ? ?. rewrite rev_append_rev. eauto.
-    - intros ys. induction ys as [ | y ys ]; intros acc.
-      + rewrite rev_append_rev.
+    induction xs as [ | x xs IHxs ]; simpl.
+    - intros. rewrite rev_append_rev, <- Permutation_rev. reflexivity.
+    - intros ys. induction ys as [ | y ys IHys ]; simpl; intros acc.
+      + replace (rev_append xs (x :: acc)) with (rev (x :: xs) ++ acc)
+        by (symmetry; apply rev_append_rev with (l := x :: xs)).
+        rewrite <- Permutation_rev. reflexivity.
+      + destruct (le1_total x y); [ rewrite IHxs | rewrite IHys ]; simpl; repeat rewrite <- Permutation_middle; eauto.
+  Qed.
 
-      + rewrite rev_append_rev.
-        exists (rev (x :: xs)). split.
-        * simpl. rewrite <- app_assoc. reflexivity.
-        * rewrite app_nil_r. eauto.
-      + destruct (leb x y) eqn:Heqb.
-        * simpl.
+  Lemma rev_merge'_sorted :
+    forall xs, StronglySorted lexord xs ->
+    forall ys, StronglySorted lexord ys ->
+    forall acc, StronglySorted (fun x y => lexord y x) acc ->
+    (forall x y, List.In x xs -> List.In y ys -> le2 x y) ->
+    (forall x a, List.In x xs -> List.In a acc -> lexord a x) ->
+    (forall y a, List.In y ys -> List.In a acc -> lexord a y) ->
+    StronglySorted (fun x y => lexord y x) (rev_merge' xs ys acc).
+  Proof.
+    unfold lexord.
+    induction 1 as [ | x xs ? IHxs Hxs ]; simpl.
+    - intros ys ? ? ? ? ? ?. rewrite rev_append_rev.
+      apply StronglySorted_app; eauto.
+    - generalize (Forall_forall' _ _ _ Hxs).
+      induction 2 as [ | y ys ? IHys Hys ]; simpl in *; intros acc ? ? ? ?.
+      + replace (rev_append xs (x :: acc)) with (rev (x :: xs) ++ acc)
+        by (symmetry; apply rev_append_rev with (l := x :: xs)).
+        apply StronglySorted_app; eauto.
+      + generalize (Forall_forall' _ _ _ Hys). intros.
+        destruct (le1_total x y) as [ | [ ] ]; [ apply IHxs | apply IHys ]; simpl in *; eauto.
+        * intros ? ? ? [ ? | ? ]; subst; eauto.
+        * intros ? ? [ ? | ? ] [ ? | ? ]; subst; eauto.
+          apply lexord_trans with (y := y); unfold lexord; eauto.
+        * { intros ? ? [ ? | ? ] [ ? | ? ]; subst; eauto.
+            - split; eauto. intros. exfalso. eauto.
+            - apply lexord_trans with (y := x); unfold lexord; eauto.
+              split; eauto. intros. exfalso. eauto. }
+      + intros ? ? ? [ ? | ? ]; subst; eauto.
+  Qed.
 
+  Corollary rev_merge_perm xs ys : Permutation (rev_merge xs ys) (xs ++ ys).
+  Proof. unfold rev_merge. rewrite rev_merge'_perm, app_nil_r. reflexivity. Qed.
 
-
-
-Local Hint Constructors StronglySorted.
-
-Lemma Forall_app_iff A (P : A -> Prop) xs ys :
-  Forall P (xs ++ ys) <-> (Forall P xs /\ Forall P ys).
-Proof.
-  split;
-    [ intros; split | intros [ ? ? ] ];
-    apply Forall_forall;
-    intros;
-    repeat match goal with
-    | H : In _ (_ ++ _) |- _ => apply in_app_or in H; destruct H
-    | |- In _ (_ ++ _) => apply in_or_app
-    | HIn : In _ ?xs, HForall : Forall _ ?xs |- _ => eapply Forall_forall in HForall; [| clear HForall ]
-    | HIn : In _ ?ys, HForall : Forall _ (_ ++ ?ys) |- _ => eapply Forall_forall in HForall; [| clear HForall ]
-    | HIn : In _ ?xs, HForall : Forall _ (?xs ++ _) |- _ => eapply Forall_forall in HForall; [| clear HForall ]
-    end; eauto.
-Qed.
-
-Corollary Forall_rev_iff A (P : A -> Prop) xs :
-  Forall P (rev xs) <-> Forall P xs.
-Proof.
-  split;
-    intros HForall;
-    apply Forall_forall;
-    intros ? HIn;
-    apply in_rev in HIn;
-    eapply Forall_forall in HForall;
-    eauto.
-Qed.
-
-Definition Forall_rev_inv A P xs := proj1 (Forall_rev_iff A P xs).
-Definition Forall_rev A P xs := proj2 (Forall_rev_iff A P xs).
-
-Corollary Forall_map_iff A B P (f : A -> B) xs :
-  Forall P (map f xs) <-> Forall (fun x => P (f x)) xs.
-Proof.
-  split;
-    intros HForall;
-    apply Forall_forall;
-    intros ? HIn;
-    [ eapply in_map in HIn
-    | apply in_map_iff in HIn; destruct HIn as [? []]; subst ];
-    eapply Forall_forall in HForall;
-    eauto.
-Qed.
-
-Definition Forall_map_inv A B P f xs := proj1 (Forall_map_iff A B P f xs).
-Definition Forall_map A B P f xs := proj2 (Forall_map_iff A B P f xs).
-
-Lemma StronglySorted_app A le (xs : list A) ys :
-  StronglySorted le xs ->
-  StronglySorted le ys ->
-  Forall (fun x => Forall (le x) ys) xs ->
-  StronglySorted le (xs ++ ys).
-Proof.
-  induction 1; simpl; intros ? HForall.
-  - eauto.
-  - inversion HForall; subst.
-    constructor; eauto.
-    apply Forall_app_iff.
-    eauto.
-Qed.
-
-Lemma StronglySorted_rev A le (xs : list A) :
-  StronglySorted (fun x y => le y x) xs ->
-  StronglySorted le (rev xs).
-Proof.
-  induction 1 as [| ? ? ? ? HForall ]; simpl.
-  - constructor.
-  - apply StronglySorted_app; eauto.
-    apply Forall_rev_iff.
-    eapply Forall_impl; [| apply HForall ].
-    eauto.
-Qed.
-
-Lemma StronglySorted_rev_inv A le (xs : list A) :
-  StronglySorted (fun x y => le y x) (rev xs) ->
-  StronglySorted le xs.
-Proof.
-  intros.
-  rewrite <- rev_involutive.
-  apply StronglySorted_rev.
-  assumption.
-Qed.
-
-Definition concat A := fold_right (@app A) [].
-
-Lemma concat_app A xs ys :
-  concat A (xs ++ ys) = concat _ xs ++ concat A ys.
-Proof.
-  induction xs; simpl in *;
-    repeat rewrite <- app_assoc;
-    congruence.
-Qed.
-
-Lemma concat_rev A xs :
-  concat A (rev (map (@rev _) xs)) = rev (concat _ xs).
-Proof.
-  induction xs; simpl in *;
-    repeat ((rewrite concat_app || rewrite app_nil_r || rewrite rev_app_distr); simpl in *);
-    congruence.
-Qed.
+  Corollary rev_merge_sorted xs ys :
+    StronglySorted lexord xs ->
+    StronglySorted lexord ys ->
+    (forall x y, List.In x xs -> List.In y ys -> le2 x y) ->
+    StronglySorted (fun x y => lexord y x) (rev_merge xs ys).
+  Proof.
+    intros. apply rev_merge'_sorted; simpl; eauto; intros ? ? ? [].
+  Qed.
+End RevMerge.
 
 Section MergeSort.
-  Local Coercion is_true : bool >-> Sortclass.
+  Variable t : Set.
+  Variable le1 : t -> t -> Prop.
+  Hypotheses le1_total : forall x y, { le1 x y } + { ~ le1 x y /\ le1 y x }.
 
-  Local Hint Constructors Permutation.
+  Fixpoint add (b : bool) xs xss :=
+    match xss with
+    | [] => [Some xs]
+    | None :: xss => Some xs :: xss
+    | Some ys :: xss =>
+        None ::
+          if b then
+            add false (rev_merge _ _ le1_total ys xs) xss
+          else
+            add true (rev_merge _ _ (fun x y => le1_total y x) xs ys) xss
+    end.
 
-  Section Tools.
-    Variable t : Set.
-    Variable leb : t -> t -> bool.
-    Hypothesis leb_total : forall x y, leb x y \/ leb y x.
-    Hypothesis leb_trans : Transitive leb.
-    Hint Resolve leb_trans.
+  Fixpoint sort (b : bool) xs xss :=
+    match xss with
+    | [] => if b then xs else rev xs
+    | [None] => if b then xs else rev xs
+    | Some ys :: xss =>
+        if b then
+          sort false (rev_merge _ _ le1_total ys xs) xss
+        else
+          sort true (rev_merge _ _ (fun x y => le1_total y x) xs ys) xss
+    | None :: None :: xss => sort b xs xss
+    | None :: Some ys :: xss =>
+        if b then
+          sort true (rev_merge _ _ (fun x y => le1_total y x) (rev xs) ys) xss
+        else
+          sort false (rev_merge _ _ le1_total ys (rev xs)) xss
+    end.
 
-    Fixpoint rev_merge xs :=
-      match xs with
-      | [] => rev_append
-      | x :: xs => fix rev_merge_inner ys :=
-          match ys with
-          | [] => rev_append (x :: xs)
-          | y :: ys => fun acc =>
-              if leb x y
-              then rev_merge xs (y :: ys) (x :: acc)
-              else rev_merge (x :: xs) ys (y :: acc)
-          end
-      end.
+  Fixpoint flatten (xss : list (option (list t))) :=
+    match xss with
+    | [] => []
+    | None :: xss => flatten xss
+    | Some xs :: xss => flatten xss ++ xs
+    end.
 
+  Hint Resolve Permutation_app_head Permutation_app_comm Permutation_rev in_or_app.
 
-    Definition rev_merge :
-      forall xs, StronglySorted leb xs ->
-      forall ys, StronglySorted leb ys ->
-      forall acc,
-      { ws | exists zs, ws = rev zs ++ acc /\ StronglySorted leb zs /\ Permutation zs (xs ++ ys) }.
-    Proof.
-      refine (fix rev_merge xs :=
-        match xs as xs0 return StronglySorted leb xs0 ->
-          forall ys, StronglySorted leb ys ->
-          forall acc,
-          { ws | exists zs, ws = rev zs ++ acc
-              /\ StronglySorted leb zs
-              /\ Permutation zs (xs0 ++ ys) } with
-        | [] => fun _ ys _ acc => exist _ (rev_append ys acc) (ex_intro _ ys _)
-        | x :: xs' => fun _ =>
-            fix rev_merge' ys :=
-              match ys as ys0 return StronglySorted leb ys0 ->
-                forall acc,
-                { ws | exists zs, ws = rev zs ++ acc
-                    /\ StronglySorted leb zs
-                    /\ Permutation zs (x :: xs' ++ ys0) }
-              with
-              | [] => fun _ acc => exist _ (rev_append xs' (x :: acc)) (ex_intro _ (x :: xs') _)
-              | y :: ys' => fun _ acc =>
-                  if Sumbool.sumbool_of_bool (leb x y) then
-                    let (zs, H) := rev_merge xs' _ (y :: ys') _ (x :: acc) in
-                    exist _ zs (let (x0, _) := H in ex_intro _ (x :: x0) _)
-                  else
-                    let (zs, H) := rev_merge' ys' _ (y :: acc) in
-                    exist _ zs (let (x0, _) := H in ex_intro _ (y :: x0) _)
-              end
-        end); try clear rev_merge';
-        repeat (simpl in *;
-            ( rewrite app_nil_r in *
-           || rewrite rev_append_rev in *
-           || rewrite <- app_assoc
-           || match goal with
-              | H : StronglySorted _ (_ :: _) |- _ => inversion H; clear H; subst
-              | H : _ /\ _ |- _ => destruct H
-              | H : leb ?x ?y = false |- _ => destruct (leb_total x y); [ congruence | clear H ]
-              end
-           || split
-           || apply SSorted_cons); subst);
-        eauto;
-        repeat match goal with
-        | H : Forall ?P ?l |- _ =>
-            assert (forall x, In x l -> P x)
-              by (apply Forall_forall; eauto);
-            clear H
-        | |- Forall _ _ =>
-            apply Forall_forall; intros
-        end.
-      - apply (Permutation_in _ H1) in H3.
-        apply in_app_iff in H3.
-        destruct H3 as [ | [ ] ]; subst; eauto.
-      - apply (Permutation_in _ H1) in H3.
-        apply in_app_iff with (l := x :: xs') in H3.
-        destruct H3 as [ [ ] | ]; subst; eauto.
-      - apply Permutation_cons_app with (l1 := x :: xs').
-        eauto.
-    Defined.
-
-    Definition meld : forall xss,
-      Forall (StronglySorted leb) xss ->
-      forall acc,
-      { zss | exists xss', zss = rev (map (@rev t) xss') ++ acc /\ length xss' = div2 (S (length xss))
-          /\ Forall (StronglySorted leb) xss'
-          /\ Permutation (concat _ xss') (concat _ xss) }.
-    Proof.
-      refine (fix meld xss :=
-        match xss as xss0 return
-          Forall (StronglySorted leb) xss0 ->
-          forall acc,
-          { zss | exists xss', zss = rev (map (@rev t) xss') ++ acc /\ length xss' = div2 (S (length xss0))
-              /\ Forall (StronglySorted leb) xss'
-              /\ Permutation (concat _ xss') (concat _ xss0) }
-        with
-        | [] => fun _ acc => exist _ acc (ex_intro _ [] _)
-        | [xs] => fun _ acc => exist _ (rev xs :: acc) (ex_intro _ [xs] _)
-        | xs :: xs' :: xss' => fun _ acc =>
-            let (ys, H1) := rev_merge xs _ xs' _ [] in
-            let (yss, H2) := meld xss' _ (ys :: acc) in
-            exist _ yss (let (zs, _) := H1 in let (zss, _) := H2 in ex_intro _ (zs :: zss) _)
-        end);
-        repeat (simpl in *;
-           ( rewrite app_nil_r in *
-          || rewrite rev_involutive in *
-          || rewrite <- app_assoc
-          || match goal with
-             | H : Forall _ (_ :: _) |- _ => inversion H; clear H
-             | H : _ /\ _ |- _ => destruct H
-             | H : exists _, _ |- _ => destruct H
-             end
-          || split); subst); eauto.
-      rewrite app_assoc.
-      apply Permutation_app; eauto.
-    Defined.
-
-    Definition splitting : forall xs acc prev,
-      Forall (StronglySorted leb) acc ->
-      { xss | Permutation (concat _ xss) (rev (concat _ acc) ++ prev :: xs)
-           /\ Forall (StronglySorted leb) xss }.
-    Proof.
-      refine (fix neutral xs :=
-        match xs as xs0 return
-          forall acc prev,
-          Forall (StronglySorted leb) acc ->
-          { xss | Permutation (concat _ xss) (rev (concat _ acc) ++ prev :: xs0)
-               /\ Forall (StronglySorted leb) xss }
-        with
-        | [] => fun acc prev _ => exist _ ([prev] :: acc) _
-        | x :: xs => fun acc prev _ =>
-            if Sumbool.sumbool_of_bool (leb prev x) then _
-            else _
-        end
-      with incr xs :=
-        match xs as xs0 return
-          forall acc curr prev,
-          Forall (StronglySorted leb) acc ->
-          StronglySorted (fun x y => leb y x) (prev :: curr) ->
-          { xss | Permutation (concat _ xss) (rev (concat _ acc) ++ rev curr ++ prev :: xs0)
-               /\ Forall (StronglySorted leb) xss }
-        with
-        | [] => fun acc curr prev _ _ => exist _ (rev_append curr [prev] :: acc) _
-        | x :: xs => fun acc curr prev _ _ =>
-            if Sumbool.sumbool_of_bool (leb prev x) then _
-            else _
-        end
-      with decr xs :=
-        match xs as xs0 return
-          forall acc curr prev,
-          Forall (StronglySorted leb) acc ->
-          StronglySorted leb (prev :: curr) ->
-          { xss | Permutation (concat _ xss) (rev (concat _ acc) ++ prev :: curr ++ xs0)
-               /\ Forall (StronglySorted leb) xss }
-        with
-        | [] => fun acc curr prev _ _ => exist _ ((prev :: curr) :: acc) _
-        | x :: xs => fun acc curr prev _ _ =>
-            if Sumbool.sumbool_of_bool (leb x prev) then _
-            else _
-        end
-      for neutral);
-      [
-      | refine (let (xs, _) := incr xs0 acc [prev] x _ _ in exist _ xs _)
-      | refine (let (xs, _) := decr xs0 acc [prev] x _ _ in exist _ xs _)
-      |
-      | refine (let (xs, _) := incr xs0 acc (prev :: curr) x _ _ in exist _ xs _)
-      | refine (let (xs, _) := neutral xs0 (rev_append curr [prev] :: acc) x _ in exist _ xs _)
-      |
-      | refine (let (xs, _) := decr xs0 acc (prev :: curr) x _ _ in exist _ xs _)
-      | refine (let (xs, _) := neutral xs0 ((prev :: curr) :: acc) x _ in exist _ xs _) ];
-      repeat
-        (( rewrite app_nil_r in *
-        || rewrite <- app_assoc in *
-        || rewrite rev_app_distr in *
-        || rewrite rev_involutive in *
-        || rewrite rev_append_rev in *
-        || apply Forall_rev
-        || apply StronglySorted_app
-        || apply StronglySorted_rev
-        || match goal with
-           | H : _ /\ _ |- _ => destruct H
-           | H : exists _, _ |- _ => destruct H
-           | H : leb ?x ?y = false |- _ => destruct (leb_total x y); [ congruence | clear H ]
-           | H : Forall _ ?l |- Forall _ ?l => eapply Forall_impl; [| apply H ]; intros
-           | H : StronglySorted _ (_ :: _) |- _ => inversion H; subst; clear H
-           | |- Forall _ (_ :: _) => constructor
-           | |- StronglySorted _ (_ :: _) => constructor
-           | _ => split
-           end
-        || split); subst; simpl in *);
-      eauto.
-    - apply Permutation_rev with (l := prev :: concat t acc).
-    - etransitivity.
-      + eassumption.
-      + eapply Permutation_app_head.
-        eauto.
-    - etransitivity.
-      + eapply Permutation_app_comm.
-      + simpl.
-        etransitivity.
-        * apply Permutation_cons_append.
-        * rewrite <- app_assoc.
-          apply Permutation_app_tail.
-          apply Permutation_rev.
-    - etransitivity.
-      + eassumption.
-      + apply Permutation_app_head.
-        etransitivity.
-        * apply Permutation_middle.
-        * apply Permutation_app_tail.
-          apply Permutation_rev.
-    - etransitivity.
-      + apply Permutation_app_comm with (l := prev :: curr).
-      + apply Permutation_app_tail.
-        apply Permutation_rev.
-    - etransitivity.
-      + eassumption.
-      + apply Permutation_app_head.
-        apply Permutation_middle with (l1 := prev :: curr).
-    - etransitivity.
-      + eassumption.
-      + apply Permutation_app_head.
-        symmetry.
-        etransitivity.
-        * apply Permutation_middle.
-        * apply Permutation_app_tail.
-          apply Permutation_rev.
-    Defined.
-  End Tools.
-
-  Arguments ltof A f a b /.
-
-  Definition merge_sort (t : Set) (leb : t -> t -> bool)
-    (leb_total : forall x y, leb x y \/ leb y x)
-    (leb_trans : Transitive leb) xs :
-    { xs' | StronglySorted leb xs' /\ Permutation xs' xs }.
+  Lemma add_perm xss : forall b xs, Permutation (flatten xss ++ xs) (flatten (add b xs xss)).
   Proof.
-    refine (match xs as xs0 return { xs' | StronglySorted leb xs' /\ Permutation xs' xs0 } with
-      | [] => exist _ [] _
-      | x :: xs =>
-          let (xss, _) := splitting _ leb _ _ xs [] x _ in
-          (fix iter_meld xss (Hwf : Acc (ltof _ (@length _)) xss) { struct Hwf } :=
-            match xss as xss0 return
-              Acc (ltof _ (@length _)) xss0 ->
-              Forall (StronglySorted leb) xss0 ->
-              Permutation (concat _ xss0) (x :: xs) ->
-              { xs' | StronglySorted leb xs' /\ Permutation xs' (x :: xs) }
-            with
-            | [] => fun _ _ _ => exist _ [] _
-            | [xs] => fun _ _ _ => exist _ xs _
-            | xs :: xs' :: xss => fun Hwf _ _ =>
-                let (xss', _) := meld _ leb _ _ (xs :: xs' :: xss) _ [] in
-                match Hwf with
-                | Acc_intro Hwf' => _
-                end
-            end Hwf
-          with iter_meld_rev xss (Hwf : Acc (ltof _ (@length _)) xss) { struct Hwf } :=
-            match xss as xss0 return
-              Acc (ltof _ (@length _)) xss0 ->
-              Forall (StronglySorted (fun x y => leb y x)) xss0 ->
-              Permutation (concat _ xss0) (x :: xs) ->
-              { xs' | StronglySorted leb xs' /\ Permutation xs' (x :: xs) }
-            with
-            | [] => fun _ _ _ => exist _ [] _
-            | [xs] => fun _ _ _ => exist _ (rev xs) _
-            | xs :: xs' :: xss => fun Hwf _ _ =>
-                let (xss', _) := meld _ (fun x y => leb y x) _ _ (xs :: xs' :: xss) _ [] in
-                match Hwf with
-                | Acc_intro Hwf' => _
-                end
-            end Hwf
-          for iter_meld) xss (well_founded_ltof _ (@length _) _) _ _
-    end);
-    [ | | | | | | | refine (iter_meld_rev xss' (Hwf' _ _) _ _) | | | | | | refine (iter_meld xss' (Hwf' _ _) _ _) | | ];
-      repeat (simpl in *;
-         ( rewrite app_nil_r in *
-        || rewrite rev_length in *
-        || rewrite map_length in *
-        || rewrite concat_rev in *
-        || match goal with
-           | H : Forall _ (_ ++ _) |- _ => apply Forall_app_iff in H
-           | H : Forall _ (_ :: _) |- _ => inversion H; clear H; subst
-           | H : _ /\ _ |- _ => destruct H
-           | H : exists _, _ |- _ => destruct H
-           | H : Forall _ ?l |- Forall _ ?l => eapply Forall_impl; [| apply H ]
-           | |- Permutation (rev ?xs) _ =>
-               apply Permutation_trans with (l' := rev (rev xs));
-               [ apply Permutation_rev
-               | rewrite rev_involutive ]
-           end
-        || apply Forall_rev
-        || apply Forall_map
-        || apply StronglySorted_rev
-        || split); subst);
-      eauto.
-    - destruct (length xss1).
-      + omega.
-      + rewrite H2.
-        apply le_n_S.
-        apply lt_div2 with (n := S (S n)).
-        omega.
-    - destruct (length xss1).
-      + omega.
-      + rewrite H2.
-        apply le_n_S.
-        apply lt_div2 with (n := S (S n)).
-        omega.
-  Defined.
+    induction xss as [ | [ ? | ] ? ]; simpl; eauto.
+    intros [] ?; rewrite <- IHxss, <- app_assoc, rev_merge_perm; eauto.
+  Qed.
+
+  Lemma sort_perm : forall xss b xs, Permutation (flatten xss ++ xs) (sort b xs xss).
+  Proof.
+    Local Hint Resolve Permutation_rev.
+    fix 1. intros [].
+    - intros []; simpl; eauto.
+    - intros [ ? | ]; [ intros ? [] ? | intros [ | [ ? | ] ? ] [] ? ]; simpl; eauto;
+        rewrite <- sort_perm, <- app_assoc, rev_merge_perm;
+        repeat rewrite <- Permutation_rev; eauto.
+  Qed.
+
+  Variable le2 : t -> t -> Prop.
+  Hypotheses le1_trans : forall x y z, le1 x y -> le1 y z -> le1 x z.
+  Hypotheses le2_trans : forall x y z, le2 x y -> le2 y z -> le2 x z.
+
+  Fixpoint Sortable b xss :=
+    match xss with
+    | [] => True
+    | None :: xss => Sortable (negb b) xss
+    | Some xs :: xss =>
+        Sortable (negb b) xss /\
+        StronglySorted (if b then lexord _ le1 le2 else fun x y => lexord _ le1 le2 y x) xs /\
+        forall x y, List.In x xs -> List.In y (flatten xss) -> le2 y x
+  end.
+
+  Lemma add_Sortable xss : forall b xs,
+    Sortable b xss ->
+    (forall x y, List.In x xs -> List.In y (flatten xss) -> le2 y x) ->
+    StronglySorted (if b then lexord _ le1 le2 else fun x y => lexord _ le1 le2 y x) xs ->
+    Sortable b (add b xs xss).
+  Proof.
+    induction xss as [ | [ | ] ]; simpl; eauto.
+    intros [] ? [ ? [ ? ? ] ] ? ?; apply IHxss; simpl in *; eauto;
+      try apply rev_merge_sorted;
+      try (intros ? ? HIn ?; eapply Permutation_in in HIn; [ | eapply rev_merge_perm ];
+        destruct (in_app_or _ _ _ HIn)); eauto.
+  Qed.
+
+  Lemma sort_sorted : forall xss (b : bool) xs,
+    (forall x y, List.In x xs -> List.In y (flatten xss) -> le2 y x) ->
+    StronglySorted (if b then lexord _ le1 le2 else fun x y => lexord _ le1 le2 y x) xs ->
+    Sortable b xss ->
+    StronglySorted (lexord _ le1 le2) (sort b xs xss).
+  Proof.
+    fix 1. intros [ ].
+    - intros []; simpl; eauto.
+    - intros [ ? | ]; [ intros ? [] ? ? ? ? | intros [ | [ ? | ] ? ] [] ? ? ? ? ]; simpl in *; eauto; apply sort_sorted;
+        try apply rev_merge_sorted;
+        try (intros ? ? HIn ?; eapply Permutation_in in HIn; [ | apply rev_merge_perm ];
+            destruct (in_app_or _ _ _ HIn)); intros;
+            repeat match goal with
+            | H : _ /\ _ |- _ => destruct H
+            | H : List.In _ (rev _) |- _ => apply in_rev in H
+            end; eauto.
+  Qed.
+
+  Fixpoint merge_sort' xss xs :=
+    match xs with
+    | [] => sort true [] xss
+    | [x] => sort true [x] xss
+    | x :: y :: xs =>
+        if le1_total x y then
+          (fix cut_non_decreasing ys y xs :=
+            match xs with
+            | [] => sort true (rev (y :: ys)) xss
+            | (x :: xs) as l =>
+                if le1_total y x then
+                  cut_non_decreasing (y :: ys) x xs
+                else
+                  merge_sort' (add true (rev (y :: ys)) xss) l
+            end) [x] y xs
+        else
+          (fix cut_decreasing ys y xs :=
+            match xs with
+            | [] => sort true (y :: ys) xss
+            | (x :: xs) as l =>
+                if le1_total y x then
+                  merge_sort' (add true (y :: ys) xss) l
+                else
+                  cut_decreasing (y :: ys) x xs
+            end) [x] y xs
+    end.
+
+  Definition merge_sort := merge_sort' [].
+
+  Lemma merge_sort'_perm : forall xs xss, Permutation (flatten xss ++ xs) (merge_sort' xss xs).
+  Proof.
+    fix 1. intros [ | x [ | y xs ] ] ?; simpl.
+    - rewrite <- sort_perm. reflexivity.
+    - rewrite <- sort_perm. reflexivity.
+    - destruct (le1_total x y) as [ | [ ] ].
+      + assert (Hnd : forall xs y ys xss, Permutation (flatten xss ++ rev ys ++ y :: xs)
+          ((fix cut_non_decreasing ys y xs :=
+            match xs with
+            | [] => sort true (rev (y :: ys)) xss
+            | (x :: xs) as l =>
+                if le1_total y x then
+                  cut_non_decreasing (y :: ys) x xs
+                else
+                  merge_sort' (add true (rev (y :: ys)) xss) l
+            end) ys y xs)).
+        { fix 1. intros xs_ y_ ? xss_. specialize (merge_sort'_perm xs_). destruct xs_ as [ | x_ xs_ ].
+          - apply sort_perm.
+          - destruct (le1_total y_ x_) as [ | [ ] ].
+            + rewrite <- merge_sort'_perm0 with (xss := xss_). simpl. rewrite <- app_assoc. reflexivity.
+            + rewrite <- merge_sort'_perm, <- add_perm. simpl. repeat rewrite <- app_assoc. reflexivity. }
+        rewrite <- Hnd with (xss := xss), <- Permutation_rev. reflexivity.
+      + assert (Hd : forall xs y ys xss, Permutation (flatten xss ++ rev ys ++ y :: xs)
+          ((fix cut_decreasing ys y xs :=
+            match xs with
+            | [] => sort true (y :: ys) xss
+            | (x :: xs) as l =>
+                if le1_total y x then
+                  merge_sort' (add true (y :: ys) xss) l
+                else
+                  cut_decreasing (y :: ys) x xs
+            end) ys y xs)).
+        { fix 1. intros xs_ y_ ? xss_. specialize (merge_sort'_perm xs_). destruct xs_ as [ | x_ xs_ ].
+          - rewrite <- sort_perm, <- Permutation_rev with (l := y_ :: ys). reflexivity.
+          - destruct (le1_total y_ x_) as [ | [ ] ].
+            + rewrite <- merge_sort'_perm, <- add_perm, Permutation_rev with (l := y_ :: ys). simpl.
+              repeat rewrite <- app_assoc. reflexivity.
+            + rewrite <- merge_sort'_perm0 with (xss := xss_). simpl.
+              rewrite <- app_assoc. reflexivity. }
+        rewrite <- Hd with (xss := xss). reflexivity.
+  Qed.
+
+  Lemma merge_sort'_sorted : forall xs xss,
+    StronglySorted le2 xs ->
+    (forall x y, List.In x xs -> List.In y (flatten xss) -> le2 y x) ->
+    Sortable true xss ->
+    StronglySorted (lexord _ le1 le2) (merge_sort' xss xs).
+  Proof.
+    fix 1. intros [ | x [ | y xs ] ] ? ? ? ?; simpl.
+    - apply sort_sorted; eauto.
+    - apply sort_sorted; eauto.
+    - repeat match goal with
+      | H : Forall _ (_ :: _) |- _ => inversion H; clear H; subst
+      | H : StronglySorted _ (_ :: _) |- _ => inversion H; clear H; subst
+      end.
+      repeat match goal with
+      | H : Forall _ _ |- _ => generalize (Forall_forall' _ _ _ H); intros ?; clear H
+      end.
+      destruct (le1_total x y) as [ | [ ] ].
+      + assert (Hnd : forall xs y ys xss,
+          Sortable true xss ->
+          (forall x y', List.In x xs -> List.In y' (y :: ys) -> le2 y' x) ->
+          (forall y', List.In y' ys -> lexord _ le1 le2 y' y) ->
+          StronglySorted (fun x y => lexord _ le1 le2 y x) ys ->
+          (forall x y', List.In x (flatten xss) -> List.In y' (y :: ys) -> le2 x y') ->
+          StronglySorted le2 xs ->
+          StronglySorted (lexord _ le1 le2)
+            ((fix cut_non_decreasing ys y xs :=
+              match xs with
+              | [] => sort true (rev (y :: ys)) xss
+              | (x :: xs) as l =>
+                  if le1_total y x then
+                    cut_non_decreasing (y :: ys) x xs
+                  else
+                    merge_sort' (add true (rev (y :: ys)) xss) l
+              end) ys y xs)).
+        { unfold lexord. fix 1. intros xs_ y_ ys xss_ ? ? ? ? ?. specialize (merge_sort'_sorted xs_).
+          destruct xs_ as [ | x_ xs_ ]; inversion 1; subst.
+          - apply sort_sorted; unfold lexord; eauto.
+            intros ? ? HIn. apply in_rev in HIn. eauto.
+          - generalize (Forall_forall' _ _ _ H14). intros. simpl in *.
+            destruct (le1_total y_ x_) as [ | [ ] ].
+            + apply merge_sort'_sorted0 with (xss := xss_); eauto.
+              * intros ? ? ? [ ? | [ ? | ? ] ]; subst; eauto.
+              * intros ? [ ? | ? ]; subst; eauto.
+                apply lexord_trans with (y := y_); unfold lexord; eauto.
+              * intros ? ? ? [ ? | [ ? | ? ] ]; subst; eauto.
+                apply le2_trans with (y := y_); eauto.
+            + apply merge_sort'_sorted; eauto.
+              * intros ? ? ? HIn.
+                apply Permutation_in with (l' := flatten xss_ ++ y_ :: ys) in HIn;
+                [ | rewrite <- add_perm, <- Permutation_rev with (l := y_ :: ys); reflexivity ].
+                apply in_app_or in HIn. destruct HIn; eauto.
+                apply le2_trans with (y := y_); eauto.
+              * { apply add_Sortable; eauto.
+          - intros ? ? HIn. apply in_rev with (l := y_ :: ys) in HIn. eauto.
+          - apply StronglySorted_rev with (xs := y_ :: ys). eauto. } }
+        apply Hnd with (xss := xss); eauto.
+        * intros ? ? ? [ ? | [ ? | [] ] ]; subst; eauto.
+        * unfold lexord. intros ? [ ? | [ ] ]; subst; eauto.
+        * simpl in *. intros ? ? ? [ ? | [ ? | [] ] ]; subst; eauto.
+      + assert (Hd : forall xs y ys xss,
+          Sortable true xss ->
+          (forall x y', List.In x xs -> List.In y' (y :: ys) -> le2 y' x) ->
+          (forall y', List.In y' ys -> lexord _ le1 le2 y y') ->
+          StronglySorted (lexord _ le1 le2) ys ->
+          (forall x y', List.In x (flatten xss) -> List.In y' (y :: ys) -> le2 x y') ->
+          StronglySorted le2 xs ->
+          StronglySorted (lexord _ le1 le2)
+          ((fix cut_decreasing ys y xs :=
+            match xs with
+            | [] => sort true (y :: ys) xss
+            | (x :: xs) as l =>
+                if le1_total y x then
+                  merge_sort' (add true (y :: ys) xss) l
+                else
+                  cut_decreasing (y :: ys) x xs
+            end) ys y xs)).
+        { unfold lexord. fix 1. intros xs_ y_ ys xss_ ? ? ? ? ?. specialize (merge_sort'_sorted xs_).
+          destruct xs_ as [ | x_ xs_ ]; inversion 1; subst.
+          - apply sort_sorted; unfold lexord; eauto.
+          - generalize (Forall_forall' _ _ _ H16). intros. simpl in *.
+            destruct (le1_total y_ x_) as [ | [ ] ].
+            + apply merge_sort'_sorted; eauto.
+              * intros ? ? ? HIn.
+                eapply Permutation_in in HIn; [ | symmetry; apply add_perm ].
+                apply in_app_or in HIn. destruct HIn; eauto.
+                apply le2_trans with (y := y_); eauto.
+              * apply add_Sortable; eauto.
+            + apply merge_sort'_sorted0 with (xss := xss_); eauto.
+              * intros ? ? ? [ ? | [ ? | ? ] ]; subst; eauto.
+              * { intros ? [ ? | ? ]; subst; eauto.
+                  - split; eauto. intros. exfalso. eauto.
+                  - apply lexord_trans with (y := y_); unfold lexord; eauto.
+                    split; eauto. intros. exfalso. eauto. }
+              * intros ? ? ? [ ? | [ ? | ? ] ]; subst; eauto.
+                apply le2_trans with (y := y_); eauto. }
+        apply Hd with (xss := xss); eauto.
+        * intros ? ? ? [ ? | [ ? | [] ] ]; subst; eauto.
+        * unfold lexord. intros ? [ ? | [ ] ]; subst; eauto.
+          split; eauto. intros. exfalso. eauto.
+        * simpl in *. intros ? ? ? [ ? | [ ? | [] ] ]; subst; eauto.
+  Qed.
+
+  Corollary merge_sort_perm xs : Permutation xs (merge_sort xs).
+  Proof. apply merge_sort'_perm with (xss := []). Qed.
+
+  Corollary merge_sort_sorted xs :
+    StronglySorted le2 xs ->
+    StronglySorted (lexord _ le1 le2) (merge_sort xs).
+  Proof.
+    intros ?. apply merge_sort'_sorted; simpl; eauto.
+    intros ? ? ? [].
+  Qed.
 End MergeSort.
 
 Require Import ExtrOcamlBasic ExtrOcamlNatInt Mergesort.
@@ -471,10 +421,6 @@ Extract Constant map => "List.map".
 Extract Constant app => "( @ )".
 Extract Constant rev => "List.rev".
 Extract Constant rev_append => "List.rev_append".
-Extract Constant Sumbool.sumbool_of_bool => "(fun b -> b)".
 Extract Constant negb => "not".
 Extract Constant NatOrder.leb => "( <= )".
 Extraction "merge_sort.ml" NatSort merge_sort.
-
-(* FUCKIN' HEAVY COMPUTATION *)
-(* Eval compute in NatSort.merge_sort [1; 1; 4; 5; 1; 4]. *)
