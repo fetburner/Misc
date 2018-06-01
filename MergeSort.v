@@ -111,7 +111,7 @@ Section RevMerge.
             - split; eauto. intros. exfalso. eauto.
             - apply lexord_trans with (y := x); unfold lexord; eauto.
               split; eauto. intros. exfalso. eauto. }
-      + intros ? ? ? [ ? | ? ]; subst; eauto.
+        * intros ? ? ? [ ? | ? ]; subst; eauto.
   Qed.
 
   Corollary rev_merge_perm xs ys : Permutation (rev_merge xs ys) (xs ++ ys).
@@ -137,11 +137,11 @@ Section MergeSort.
     | [] => [Some xs]
     | None :: xss => Some xs :: xss
     | Some ys :: xss =>
-        None ::
-          if b then
-            add false (rev_merge _ _ le1_total ys xs) xss
-          else
-            add true (rev_merge _ _ (fun x y => le1_total y x) xs ys) xss
+        None :: add (negb b)
+          (if b then
+             rev_merge _ _ le1_total ys xs
+           else
+             rev_merge _ _ (fun x y => le1_total y x) xs ys) xss
     end.
 
   Fixpoint sort (b : bool) xs xss :=
@@ -149,16 +149,18 @@ Section MergeSort.
     | [] => if b then xs else rev xs
     | [None] => if b then xs else rev xs
     | Some ys :: xss =>
-        if b then
-          sort false (rev_merge _ _ le1_total ys xs) xss
-        else
-          sort true (rev_merge _ _ (fun x y => le1_total y x) xs ys) xss
+        sort (negb b)
+          (if b then
+             rev_merge _ _ le1_total ys xs
+           else
+             rev_merge _ _ (fun x y => le1_total y x) xs ys) xss
     | None :: None :: xss => sort b xs xss
     | None :: Some ys :: xss =>
-        if b then
-          sort true (rev_merge _ _ (fun x y => le1_total y x) (rev xs) ys) xss
-        else
-          sort false (rev_merge _ _ le1_total ys (rev xs)) xss
+        sort b
+          (if b then
+             rev_merge _ _ (fun x y => le1_total y x) (rev xs) ys
+           else
+             rev_merge _ _ le1_total ys (rev xs)) xss
     end.
 
   Fixpoint flatten (xss : list (option (list t))) :=
@@ -209,8 +211,7 @@ Section MergeSort.
     induction xss as [ | [ | ] ]; simpl; eauto.
     intros [] ? [ ? [ ? ? ] ] ? ?; apply IHxss; simpl in *; eauto;
       try apply rev_merge_sorted;
-      try (intros ? ? HIn ?; eapply Permutation_in in HIn; [ | eapply rev_merge_perm ];
-        destruct (in_app_or _ _ _ HIn)); eauto.
+      try (intros ? ? HIn ?; eapply Permutation_in in HIn; [ | eapply rev_merge_perm ]; destruct (in_app_or _ _ _ HIn)); eauto.
   Qed.
 
   Lemma sort_sorted : forall xss (b : bool) xs,
@@ -223,12 +224,11 @@ Section MergeSort.
     - intros []; simpl; eauto.
     - intros [ ? | ]; [ intros ? [] ? ? ? ? | intros [ | [ ? | ] ? ] [] ? ? ? ? ]; simpl in *; eauto; apply sort_sorted;
         try apply rev_merge_sorted;
-        try (intros ? ? HIn ?; eapply Permutation_in in HIn; [ | apply rev_merge_perm ];
-            destruct (in_app_or _ _ _ HIn)); intros;
-            repeat match goal with
-            | H : _ /\ _ |- _ => destruct H
-            | H : List.In _ (rev _) |- _ => apply in_rev in H
-            end; eauto.
+        try (intros ? ? HIn ?; eapply Permutation_in in HIn; [ | apply rev_merge_perm ]; destruct (in_app_or _ _ _ HIn)); intros;
+        repeat match goal with
+        | H : _ /\ _ |- _ => destruct H
+        | H : List.In _ (rev _) |- _ => apply in_rev in H
+        end; eauto.
   Qed.
 
   Fixpoint merge_sort' xss xs :=
@@ -236,8 +236,8 @@ Section MergeSort.
     | [] => sort true [] xss
     | [x] => sort true [x] xss
     | x :: y :: xs =>
-        if le1_total x y then
-          (fix cut_non_decreasing ys y xs :=
+        (if le1_total x y then
+          fix cut_non_decreasing ys y xs :=
             match xs with
             | [] => sort true (rev (y :: ys)) xss
             | (x :: xs) as l =>
@@ -245,9 +245,9 @@ Section MergeSort.
                   cut_non_decreasing (y :: ys) x xs
                 else
                   merge_sort' (add true (rev (y :: ys)) xss) l
-            end) [x] y xs
-        else
-          (fix cut_decreasing ys y xs :=
+            end
+         else
+          fix cut_decreasing ys y xs :=
             match xs with
             | [] => sort true (y :: ys) xss
             | (x :: xs) as l =>
